@@ -31,4 +31,4 @@ async def get_current_user_id(
             raise UnauthorizedException()
         return int(user_id)
     except (JWTError, ValueError):
-        raise UnauthorizedException("유효하지 않은 토큰입니다.")
+        raise UnauthorizedException("유효하지 않은 토큰입니다.") from None
