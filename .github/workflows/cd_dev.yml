@@ -1,0 +1,131 @@
+name: Dev Deploy
+
+on:
+  workflow_dispatch:  # 수동 실행 전용 (자동 배포 비활성화)
+
+jobs:
+  dev_deploy:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Docker Hub 로그인
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Docker Buildx 세팅
+        uses: docker/setup-buildx-action@v3
+
+      - name: 앱 이미지 빌드 & 푸시
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/gembti-be:dev
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/gembti-be:cache
+          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/gembti-be:cache,mode=max
+
+      - name: Nginx 이미지 빌드 & 푸시
+        uses: docker/build-push-action@v5
+        with:
+          context: ./nginx
+          file: ./nginx/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/gembti-nginx:dev
+
+      - name: GitHub Actions IP 조회
+        id: ip
+        uses: haythem/public-ip@v1.3
+
+      - name: AWS 자격증명 설정
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+
+      - name: Security Group에 IP 추가
+        run: |
+          aws ec2 authorize-security-group-ingress \
+            --group-id ${{ secrets.AWS_SG_ID }} \
+            --protocol tcp --port 22 \
+            --cidr ${{ steps.ip.outputs.ipv4 }}/32
+
+      - name: EC2 SSH 배포 (단일 서버 — 모든 컨테이너 포함)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_DEV_HOST }}
+          username: ${{ secrets.EC2_DEV_USER }}
+          key: ${{ secrets.EC2_DEV_SSH_KEY }}
+          script: |
+            docker network create gembti_net || true
+
+            # ── 인프라: 최초 배포 시에만 기동 ──────────────
+            if ! docker ps -q -f name=gembti_postgres | grep -q .; then
+              docker run -d \
+                --name gembti_postgres \
+                --network gembti_net \
+                --restart unless-stopped \
+                -v postgres_data:/var/lib/postgresql/data \
+                --env-file ~/gembti/.env \
+                pgvector/pgvector:pg16
+            fi
+
+            if ! docker ps -q -f name=gembti_redis | grep -q .; then
+              docker run -d \
+                --name gembti_redis \
+                --network gembti_net \
+                --restart unless-stopped \
+                -v redis_data:/data \
+                redis:7-alpine redis-server --appendonly yes
+            fi
+
+            # ── 앱 컨테이너 교체 ──────────────────────────
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/gembti-be:dev
+            docker stop gembti_app || true
+            docker rm gembti_app || true
+            docker run -d \
+              --name gembti_app \
+              --network gembti_net \
+              --restart unless-stopped \
+              --env-file ~/gembti/.env \
+              ${{ secrets.DOCKERHUB_USERNAME }}/gembti-be:dev \
+              sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+            docker stop gembti_celery || true
+            docker rm gembti_celery || true
+            docker run -d \
+              --name gembti_celery \
+              --network gembti_net \
+              --restart unless-stopped \
+              --env-file ~/gembti/.env \
+              ${{ secrets.DOCKERHUB_USERNAME }}/gembti-be:dev \
+              celery -A app.core.celery_app worker --loglevel=info --concurrency=2
+
+            # ── Nginx 컨테이너 교체 ───────────────────────
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/gembti-nginx:dev
+            docker stop gembti_nginx || true
+            docker rm gembti_nginx || true
+            docker run -d \
+              --name gembti_nginx \
+              --network gembti_net \
+              --restart unless-stopped \
+              -p 80:80 \
+              ${{ secrets.DOCKERHUB_USERNAME }}/gembti-nginx:dev
+
+            docker image prune -af
+
+      - name: Security Group에서 IP 제거
+        if: always()
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id ${{ secrets.AWS_SG_ID }} \
+            --protocol tcp --port 22 \
+            --cidr ${{ steps.ip.outputs.ipv4 }}/32 \
+            --region ap-northeast-2
