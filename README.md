@@ -13,6 +13,7 @@
 5. [Docker 세팅](#docker-세팅)
 6. [데이터베이스 마이그레이션](#데이터베이스-마이그레이션)
 7. [테스트](#테스트)
+8. [CI/CD](#cicd)
 
 ---
 
@@ -68,24 +69,25 @@ gembti_BE/
 │   ├── Dockerfile           # Nginx 독립 이미지
 │   └── conf.d/default.conf  # 리버스 프록시 설정
 ├── scripts/
-│   ├── ec2_setup.sh         # EC2 초기 세팅 스크립트
-│   └── iam_policy.json      # GitHub Actions용 IAM 정책
+│   └── format.sh            # 코드 포매터 일괄 실행
 ├── tests/
 │   ├── conftest.py          # DB / 클라이언트 픽스처
-│   ├── test_config.py
-│   ├── test_security.py
-│   ├── test_exceptions.py
-│   ├── test_dependencies.py
-│   └── test_health.py
+│   └── core/                # core 레이어 단위 테스트
+│       ├── test_config.py
+│       ├── test_security.py
+│       ├── test_exceptions.py
+│       ├── test_dependencies.py
+│       └── test_health.py
 ├── docs/help/support/       # 고객센터 RAG 도움말 문서
 ├── .github/workflows/
 │   ├── ci.yml               # lint + test (모든 브랜치 push / PR)
-│   ├── cd_dev.yml           # develop PR merge → 개발 EC2 배포
-│   └── cd_prod.yml          # main PR merge → 운영 서버 배포
+│   ├── cd_dev.yml           # 개발 서버 배포 (수동 실행 전용)
+│   └── cd_prod.yml          # 운영 서버 배포 (수동 실행 전용)
 ├── conftest.py              # 테스트 환경변수 주입 (루트)
 ├── Dockerfile               # 멀티스테이지 빌드
-├── docker-compose.yml       # 로컬 / 개발 서버 공통
+├── docker-compose.yml       # 운영 공통 스택
 ├── docker-compose.dev.yml   # 로컬 개발 오버라이드 (핫리로드)
+├── docker-compose.infra.yml # 로컬 인프라 전용 (postgres + redis)
 ├── alembic.ini
 ├── pyproject.toml
 └── .env.example
@@ -101,7 +103,9 @@ gembti_BE/
 - [uv](https://docs.astral.sh/uv/)
 - Docker Desktop
 
-### 설치 및 실행
+### 방법 1 — 인프라 Docker + 앱 로컬 실행 (권장)
+
+소스 변경이 즉시 반영되고 디버깅이 편합니다.
 
 ```bash
 # 1. 저장소 클론
@@ -114,20 +118,28 @@ cp .env.example .env
 # 3. 의존성 설치
 uv sync
 
-# 4. 전체 서비스 실행 (핫리로드 포함)
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+# 4. 인프라(PostgreSQL + Redis)만 Docker로 기동
+docker compose -f docker-compose.infra.yml up -d
 
 # 5. DB 마이그레이션
-docker compose exec app alembic upgrade head
+uv run alembic upgrade head
+
+# 6. FastAPI 실행 (핫리로드)
+uv run uvicorn app.main:app --reload
 ```
 
-서비스 접속:
+### 방법 2 — 전체 Docker 스택
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
+
+### 서비스 접속
 
 | URL | 설명 |
 |---|---|
 | http://localhost:8000 | API |
 | http://localhost:8000/docs | Swagger (`DEBUG=True` 시) |
-| http://localhost:5555 | Flower — Celery 모니터링 |
 
 ---
 
@@ -161,24 +173,29 @@ builder  →  uv로 .venv에 의존성 설치
 runtime  →  .venv만 복사 + 소스 복사, 전용 유저(appuser)로 실행
 ```
 
-### 컨테이너 구성 (로컬 / 개발 서버)
+### 컨테이너 구성
 
 | 컨테이너 | 이미지 | 역할 |
 |---|---|---|
-| `gembti_app` | 프로젝트 빌드 | FastAPI (uvicorn) |
-| `gembti_celery` | 프로젝트 빌드 | Celery Worker |
 | `gembti_postgres` | pgvector/pgvector:pg16 | PostgreSQL + pgvector |
 | `gembti_redis` | redis:7-alpine | Redis |
+| `gembti_app` | 프로젝트 빌드 | FastAPI (uvicorn) |
+| `gembti_celery` | 프로젝트 빌드 | Celery Worker |
 | `gembti_nginx` | nginx:alpine | 리버스 프록시 |
 
-### 명령어
+### 주요 명령어
 
+```bash
+# 인프라만 기동 (로컬 개발)
+docker compose -f docker-compose.infra.yml up -d
 
+# 전체 스택 기동 (운영과 동일)
+docker compose up --build
 
-# 로컬 개발 모드 (핫리로드 + Flower)
+# 전체 스택 기동 (개발 모드 — 핫리로드)
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 
-# 로그
+# 로그 확인
 docker compose logs -f app
 
 # 종료
@@ -191,16 +208,13 @@ docker compose down
 
 ```bash
 # 마이그레이션 파일 생성
-alembic revision --autogenerate -m "설명"
+uv run alembic revision --autogenerate -m "설명"
 
 # 적용
-alembic upgrade head
+uv run alembic upgrade head
 
 # 롤백
-alembic downgrade -1
-
-# Docker 환경
-docker compose exec app alembic upgrade head
+uv run alembic downgrade -1
 ```
 
 > 새 모델 추가 시 `alembic/env.py`의 모델 import 주석을 해제해야 자동 감지됩니다.
@@ -213,8 +227,8 @@ docker compose exec app alembic upgrade head
 # 전체 테스트 + 커버리지
 uv run pytest
 
-# 특정 파일
-uv run pytest tests/test_security.py -v
+# core 레이어만
+uv run pytest tests/core/ -v
 
 # HTML 커버리지 리포트
 uv run pytest --cov=app --cov-report=html
@@ -230,3 +244,21 @@ uv run pytest --cov=app --cov-report=html
 
 ---
 
+## CI/CD
+
+### CI (`ci.yml`)
+
+모든 브랜치 push 및 `main` / `develop` PR 시 자동 실행
+
+```
+lint (ruff → isort → black → mypy) → test (pytest + codecov)
+```
+
+### CD
+
+| 워크플로우 | 대상 | 트리거 |
+|---|---|---|
+| `cd_dev.yml` | 개발 EC2 | 수동 실행 (`workflow_dispatch`) |
+| `cd_prod.yml` | 운영 EC2 | 수동 실행 (`workflow_dispatch`) |
+
+배포 흐름: Docker Hub 이미지 빌드 & 푸시 → EC2 SSH → 컨테이너 교체
