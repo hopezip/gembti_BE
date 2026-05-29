@@ -1,9 +1,7 @@
 name: Prod Deploy
 
 on:
-  pull_request:
-    types: [closed]
-    branches: [main]
+  workflow_dispatch:  # 수동 실행 전용 (자동 배포 비활성화)
 
 jobs:
   prod_deploy:
