@@ -1,0 +1,35 @@
+# 로컬 개발 전용 오버라이드
+# 사용법: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+
+  app:
+    build:
+      target: runtime
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./app:/app/app   # 소스 핫리로드
+    environment:
+      DEBUG: "True"
+    ports:
+      - "8000:8000"      # 개발 시 직접 접근
+
+  celery:
+    command: celery -A app.core.celery_app worker --loglevel=debug --concurrency=2
+    volumes:
+      - ./app:/app/app
+
+  # 개발 편의: Flower (Celery 모니터링 UI)
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: gembti_flower
+    command: celery -A app.core.celery_app flower --port=5555
+    env_file: .env
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+      - celery
