@@ -1,4 +1,5 @@
 """루트 conftest — tests/conftest.py 보다 먼저 실행되어 앱 임포트 전에 환경변수를 주입합니다."""
+
 import os
 
 os.environ.setdefault("APP_ENV", "test")

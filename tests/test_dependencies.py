@@ -1,7 +1,7 @@
-import pytest
 from fastapi import Depends
 from fastapi.responses import JSONResponse
 from httpx import ASGITransport, AsyncClient
+import pytest
 
 from app.core.dependencies import get_current_user_id
 from app.core.security import create_access_token, create_refresh_token
