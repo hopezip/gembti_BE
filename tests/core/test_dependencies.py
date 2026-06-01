@@ -40,7 +40,7 @@ async def test_invalid_token_returns_401():
 
 @pytest.mark.asyncio
 async def test_refresh_token_rejected():
-    token = create_refresh_token(subject=7)
+    token = create_refresh_token()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         r = await ac.get("/me-test", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 401
