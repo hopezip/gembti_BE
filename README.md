@@ -57,8 +57,9 @@ gembti_BE/
 │   ├── recommend/           # 게임 추천
 │   ├── game/                # 게임 정보
 │   ├── steam/               # Steam 데이터 동기화
-│   ├── support/             # 고객센터 챗봇
-│   ├── chat/                # 설문 챗봇
+│   ├── chat/                # 챗봇
+│   │   ├── support/         # 고객센터/CS 챗봇
+│   │   └── survey/          # 설문 챗봇
 │   ├── chat_common/         # 챗봇 공통
 │   └── common/              # 공통 유틸
 ├── alembic/

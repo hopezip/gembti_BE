@@ -5,6 +5,7 @@ from sqlalchemy import engine_from_config, pool
 
 # ── 모델 import (마이그레이션 자동 감지용) ─────────────────
 from app.auth.models import *  # noqa: F401, F403
+from app.chat.support.models import *  # noqa: F401, F403
 from app.community.models import *  # noqa: F401, F403
 from app.core.config import settings
 from app.core.database import Base
@@ -12,7 +13,6 @@ from app.game.models import *  # noqa: F401, F403
 from app.recommend.models import *  # noqa: F401, F403
 from app.stat.models import *  # noqa: F401, F403
 from app.steam.models import *  # noqa: F401, F403
-from app.support.models import *  # noqa: F401, F403
 from app.survey.models import *  # noqa: F401, F403
 
 config = context.config

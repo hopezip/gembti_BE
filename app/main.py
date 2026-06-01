@@ -39,7 +39,7 @@ def create_app() -> FastAPI:
     # from app.recommend.router import router as recommend_router
     # from app.game.router import router as game_router
     # from app.steam.router import router as steam_router
-    # from app.support.router import router as support_router
+    # from app.chat.support.router import router as support_router
     # from app.chat.router import router as chat_router
 
     # API_PREFIX = "/api/v1"

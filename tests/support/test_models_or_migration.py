@@ -2,7 +2,7 @@ from pathlib import Path
 
 from sqlalchemy import Text
 
-from app.support.models import SupportHelpDocChunk, SupportHelpDocument
+from app.chat.support.models import SupportHelpDocChunk, SupportHelpDocument
 
 MIGRATION_PATH = Path("alembic/versions/2026-06-01_13-45-59_create_support_help_rag_tables.py")
 
@@ -10,7 +10,7 @@ MIGRATION_PATH = Path("alembic/versions/2026-06-01_13-45-59_create_support_help_
 def test_support_help_models_are_rag_only():
     assert SupportHelpDocument.__tablename__ == "support_help_documents"
     assert SupportHelpDocChunk.__tablename__ == "support_help_doc_chunks"
-    model_text = Path("app/support/models.py").read_text(encoding="utf-8")
+    model_text = Path("app/chat/support/models.py").read_text(encoding="utf-8")
     assert "support_chat_sessions" not in model_text
     assert "support_chat_messages" not in model_text
 
