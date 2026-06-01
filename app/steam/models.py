@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
-    Boolean,
     DateTime,
+    Enum,
     ForeignKey,
     Integer,
     String,
@@ -15,10 +16,18 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.common.enums import enum_values
 from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.auth.models import User
+
+
+class SteamSyncStatus(StrEnum):
+    SUCCESS = "success"
+    PRIVATE = "private"
+    FAILED = "failed"
+    EMPTY = "empty"
 
 
 class SteamAccount(Base):
@@ -31,28 +40,23 @@ class SteamAccount(Base):
         nullable=False,
         index=True,
     )
-    steam_id_64: Mapped[str] = mapped_column(
-        String(32),
+    steam_id_64: Mapped[int] = mapped_column(
+        BigInteger,
         unique=True,
         index=True,
         nullable=False,
     )
-    steam_nickname: Mapped[str | None] = mapped_column(String(100), nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    profile_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    is_profile_public: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    is_library_public: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    steam_sync_status: Mapped[SteamSyncStatus] = mapped_column(
+        Enum(SteamSyncStatus, name="steam_sync_status", values_callable=enum_values),
+        nullable=False,
+        default=SteamSyncStatus.FAILED,
+    )
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
     )
 
     user: Mapped[User] = relationship("User", back_populates="steam_account")
@@ -70,16 +74,9 @@ class UserLibraryGame(Base):
         nullable=False,
         index=True,
     )
-    game_id: Mapped[int | None] = mapped_column(
-        ForeignKey("games.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
     steam_app_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
-    playtime_forever: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    playtime_2weeks: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    playtime_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_played_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    estimated_rating: Mapped[float | None] = mapped_column(nullable=True)
     synced_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

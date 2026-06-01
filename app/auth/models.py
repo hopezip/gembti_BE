@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import Date, DateTime, Enum, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.common.enums import enum_values
 from app.core.database import Base
 
 if TYPE_CHECKING:
@@ -14,21 +15,21 @@ if TYPE_CHECKING:
 
 
 class LoginProvider(StrEnum):
-    EMAIL = "EMAIL"
-    STEAM = "STEAM"
+    EMAIL = "email"
+    STEAM = "steam"
 
 
 class UserStatus(StrEnum):
-    ACTIVE = "ACTIVE"
-    INACTIVE = "INACTIVE"
-    WITHDRAWN = "WITHDRAWN"
-    DELETED = "DELETED"
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    WITHDRAWN = "withdrawn"
+    DELETED = "deleted"
 
 
 class Gender(StrEnum):
-    MALE = "MALE"
-    FEMALE = "FEMALE"
-    OTHER = "OTHER"
+    MALE = "male"
+    FEMALE = "female"
+    OTHER = "other"
 
 
 class EmailVerificationPurpose(StrEnum):
@@ -58,17 +59,20 @@ class User(Base):
     profile_image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     bio: Mapped[str | None] = mapped_column(String(160), nullable=True)
     login_provider: Mapped[LoginProvider] = mapped_column(
-        Enum(LoginProvider, name="login_provider"),
+        Enum(LoginProvider, name="login_provider", values_callable=enum_values),
         nullable=False,
         default=LoginProvider.EMAIL,
     )
     status: Mapped[UserStatus] = mapped_column(
-        Enum(UserStatus, name="user_status"),
+        Enum(UserStatus, name="user_status", values_callable=enum_values),
         nullable=False,
         default=UserStatus.ACTIVE,
         index=True,
     )
-    gender: Mapped[Gender | None] = mapped_column(Enum(Gender, name="gender"), nullable=True)
+    gender: Mapped[Gender | None] = mapped_column(
+        Enum(Gender, name="gender", values_callable=enum_values),
+        nullable=True,
+    )
     birth_date: Mapped[Date | None] = mapped_column(Date, nullable=True)
     withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     hard_delete_after: Mapped[datetime | None] = mapped_column(
@@ -124,11 +128,19 @@ class EmailVerification(Base):
     email: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
     token_hash: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     purpose: Mapped[EmailVerificationPurpose] = mapped_column(
-        Enum(EmailVerificationPurpose, name="email_verification_purpose"),
+        Enum(
+            EmailVerificationPurpose,
+            name="email_verification_purpose",
+            values_callable=enum_values,
+        ),
         nullable=False,
     )
     status: Mapped[EmailVerificationStatus] = mapped_column(
-        Enum(EmailVerificationStatus, name="email_verification_status"),
+        Enum(
+            EmailVerificationStatus,
+            name="email_verification_status",
+            values_callable=enum_values,
+        ),
         nullable=False,
         default=EmailVerificationStatus.PENDING,
     )
@@ -156,7 +168,11 @@ class UserWithdrawalRequest(Base):
     reason: Mapped[str | None] = mapped_column(String(100), nullable=True)
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[UserWithdrawalStatus] = mapped_column(
-        Enum(UserWithdrawalStatus, name="user_withdrawal_status"),
+        Enum(
+            UserWithdrawalStatus,
+            name="user_withdrawal_status",
+            values_callable=enum_values,
+        ),
         nullable=False,
         default=UserWithdrawalStatus.REQUESTED,
         index=True,
