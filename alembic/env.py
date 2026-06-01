@@ -12,6 +12,7 @@ from app.game.models import *  # noqa: F401, F403
 from app.recommend.models import *  # noqa: F401, F403
 from app.stat.models import *  # noqa: F401, F403
 from app.steam.models import *  # noqa: F401, F403
+from app.support.models import *  # noqa: F401, F403
 from app.survey.models import *  # noqa: F401, F403
 
 config = context.config
