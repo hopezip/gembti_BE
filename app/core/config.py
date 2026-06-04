@@ -29,7 +29,21 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # ── CORS ─────────────────────────────────────────────
-    ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
+    ALLOWED_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "https://gembti.cloud",
+        "https://www.gembti.cloud",
+    ]
+    ALLOWED_ORIGIN_REGEX: str = r"https://.*\.vercel\.app"
+    TRUSTED_HOSTS: list[str] = [
+        "localhost",
+        "127.0.0.1",
+        "gembti.cloud",
+        "www.gembti.cloud",
+    ]
+
+    # ── Rate Limit ───────────────────────────────────────
+    RATE_LIMIT: str = "200/minute"
 
     # ── OpenAI ───────────────────────────────────────────
     OPENAI_API_KEY: str
