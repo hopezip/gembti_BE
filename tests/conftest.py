@@ -43,7 +43,7 @@ async def client(db_session: AsyncSession):
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as ac:
         yield ac
     app.dependency_overrides.clear()
 
@@ -51,5 +51,5 @@ async def client(db_session: AsyncSession):
 @pytest_asyncio.fixture
 async def anon_client():
     """DB 없이 사용하는 기본 테스트 클라이언트."""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as ac:
         yield ac
