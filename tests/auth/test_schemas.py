@@ -1,0 +1,37 @@
+from pydantic import ValidationError
+import pytest
+
+from app.auth.schemas import SignupRequest
+
+
+def valid_signup_data() -> dict[str, object]:
+    return {
+        "email": "test@example.com",
+        "password": "Password!1",
+        "password_confirm": "Password!1",
+        "nickname": "테스터1",
+        "terms_agreed": True,
+        "privacy_agreed": True,
+    }
+
+
+def test_signup_schema_accepts_valid_request() -> None:
+    request = SignupRequest.model_validate(valid_signup_data())
+    assert request.email == "test@example.com"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("password", "onlyletters"),
+        ("password_confirm", "different!1"),
+        ("nickname", "bad!name"),
+        ("terms_agreed", False),
+    ],
+)
+def test_signup_schema_rejects_invalid_request(field: str, value: object) -> None:
+    data = valid_signup_data()
+    data[field] = value
+
+    with pytest.raises(ValidationError):
+        SignupRequest.model_validate(data)
