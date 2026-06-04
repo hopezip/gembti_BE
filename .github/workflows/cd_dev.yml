@@ -89,8 +89,7 @@ jobs:
 
             # ── 앱 컨테이너 교체 ──────────────────────────
             docker pull ${{ secrets.DOCKERHUB_USERNAME }}/gembti-be:dev
-            docker stop gembti_app || true
-            docker rm gembti_app || true
+            docker rm -f gembti_app || true
             docker run -d \
               --name gembti_app \
               --network gembti_net \
@@ -99,8 +98,7 @@ jobs:
               ${{ secrets.DOCKERHUB_USERNAME }}/gembti-be:dev \
               sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
-            docker stop gembti_celery || true
-            docker rm gembti_celery || true
+            docker rm -f gembti_celery || true
             docker run -d \
               --name gembti_celery \
               --network gembti_net \
@@ -111,8 +109,7 @@ jobs:
 
             # ── Nginx 컨테이너 교체 ───────────────────────
             docker pull ${{ secrets.DOCKERHUB_USERNAME }}/gembti-nginx:dev
-            docker stop gembti_nginx || true
-            docker rm gembti_nginx || true
+            docker rm -f gembti_nginx || true
             docker run -d \
               --name gembti_nginx \
               --network gembti_net \
