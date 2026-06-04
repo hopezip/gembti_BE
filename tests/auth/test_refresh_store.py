@@ -3,7 +3,7 @@ from collections.abc import Iterator
 import pytest
 
 from app.auth import refresh_store
-from app.core.security import create_refresh_token, hash_token
+from app.core.security import create_access_token, create_refresh_token, decode_token
 
 
 class FakeRedis:
@@ -64,22 +64,22 @@ def test_user_refresh_set_key() -> None:
 
 @pytest.mark.asyncio
 async def test_save_refresh_token(fake_redis: FakeRedis) -> None:
-    token = create_refresh_token()
-    token_hash = await refresh_store.save_refresh_token(7, token, "email")
+    token = create_refresh_token(subject=7)
+    jti = await refresh_store.save_refresh_token(7, token, "email")
 
-    refresh_key = refresh_store.refresh_key(token_hash)
+    refresh_key = refresh_store.refresh_key(jti)
     user_key = refresh_store.user_refresh_set_key(7)
 
-    assert token_hash == hash_token(token)
+    assert jti == decode_token(token)["jti"]
     assert fake_redis.hashes[refresh_key] == {"user_id": "7", "provider": "email"}
-    assert token_hash in fake_redis.sets[user_key]
+    assert jti in fake_redis.sets[user_key]
     assert fake_redis.expires[refresh_key] > 0
     assert fake_redis.expires[user_key] > 0
 
 
 @pytest.mark.asyncio
 async def test_validate_refresh_token(fake_redis: FakeRedis) -> None:
-    token = create_refresh_token()
+    token = create_refresh_token(subject=7)
     await refresh_store.save_refresh_token(7, token, "email")
 
     assert await refresh_store.validate_refresh_token(token) == 7
@@ -87,31 +87,43 @@ async def test_validate_refresh_token(fake_redis: FakeRedis) -> None:
 
 @pytest.mark.asyncio
 async def test_validate_missing_refresh_token(fake_redis: FakeRedis) -> None:
-    token = create_refresh_token()
+    token = create_refresh_token(subject=7)
 
     assert await refresh_store.validate_refresh_token(token) is None
 
 
 @pytest.mark.asyncio
+async def test_validate_access_token_is_rejected(fake_redis: FakeRedis) -> None:
+    token = create_access_token(subject=7)
+
+    assert await refresh_store.validate_refresh_token(token) is None
+
+
+@pytest.mark.asyncio
+async def test_validate_invalid_token_is_rejected(fake_redis: FakeRedis) -> None:
+    assert await refresh_store.validate_refresh_token("invalid.token") is None
+
+
+@pytest.mark.asyncio
 async def test_delete_refresh_token(fake_redis: FakeRedis) -> None:
-    token = create_refresh_token()
-    token_hash = await refresh_store.save_refresh_token(7, token, "email")
+    token = create_refresh_token(subject=7)
+    jti = await refresh_store.save_refresh_token(7, token, "email")
 
     await refresh_store.delete_refresh_token(token, user_id=7)
 
-    assert refresh_store.refresh_key(token_hash) not in fake_redis.hashes
-    assert token_hash not in fake_redis.sets[refresh_store.user_refresh_set_key(7)]
+    assert refresh_store.refresh_key(jti) not in fake_redis.hashes
+    assert jti not in fake_redis.sets[refresh_store.user_refresh_set_key(7)]
 
 
 @pytest.mark.asyncio
 async def test_delete_all_refresh_tokens_for_user(fake_redis: FakeRedis) -> None:
-    first_token = create_refresh_token()
-    second_token = create_refresh_token()
-    first_hash = await refresh_store.save_refresh_token(7, first_token, "email")
-    second_hash = await refresh_store.save_refresh_token(7, second_token, "email")
+    first_token = create_refresh_token(subject=7)
+    second_token = create_refresh_token(subject=7)
+    first_jti = await refresh_store.save_refresh_token(7, first_token, "email")
+    second_jti = await refresh_store.save_refresh_token(7, second_token, "email")
 
     await refresh_store.delete_all_refresh_tokens_for_user(7)
 
-    assert refresh_store.refresh_key(first_hash) not in fake_redis.hashes
-    assert refresh_store.refresh_key(second_hash) not in fake_redis.hashes
+    assert refresh_store.refresh_key(first_jti) not in fake_redis.hashes
+    assert refresh_store.refresh_key(second_jti) not in fake_redis.hashes
     assert refresh_store.user_refresh_set_key(7) not in fake_redis.sets
