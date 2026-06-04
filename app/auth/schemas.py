@@ -1,1 +1,6 @@
-# auth Request/Response 스키마
+from pydantic import BaseModel
+
+
+class AccessTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"

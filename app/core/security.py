@@ -1,6 +1,4 @@
 from datetime import UTC, datetime, timedelta
-import hashlib
-import secrets
 from uuid import uuid4
 
 import bcrypt
@@ -39,12 +37,24 @@ def create_access_token(
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-def create_refresh_token() -> str:
-    return secrets.token_urlsafe(64)
+def create_refresh_token(
+    subject: str | int,
+    expires_delta: timedelta | None = None,
+    provider: str | None = None,
+) -> str:
+    issued_at = datetime.now(UTC)
+    expire = issued_at + (expires_delta or timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS))
+    payload: dict[str, str | int | datetime] = {
+        "sub": str(subject),
+        "exp": expire,
+        "iat": int(issued_at.timestamp()),
+        "jti": str(uuid4()),
+        "type": "refresh",
+    }
+    if provider is not None:
+        payload["provider"] = provider
 
-
-def hash_token(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
 def decode_token(token: str) -> dict:
