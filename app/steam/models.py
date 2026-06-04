@@ -16,8 +16,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.common.enums import enum_values
 from app.core.database import Base
+from app.core.enums import enum_values
 
 if TYPE_CHECKING:
     from app.auth.models import User

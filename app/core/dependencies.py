@@ -9,6 +9,7 @@ from app.core.database import AsyncSessionLocal
 from app.core.exceptions import UnauthorizedException
 from app.core.security import decode_token
 
+# 이 파일 왜 있는지 여쭤볼 것
 bearer_scheme = HTTPBearer(auto_error=False)
 
 

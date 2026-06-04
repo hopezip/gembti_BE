@@ -1,0 +1,1 @@
+# games, game_tags 저장/조회
