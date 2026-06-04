@@ -1,11 +1,12 @@
 name: Dev Deploy
 
 on:
-  workflow_dispatch:  # 수동 실행 전용 (자동 배포 비활성화)
+  push:
+    branches: [develop]
+  workflow_dispatch:
 
 jobs:
   dev_deploy:
-    if: true
     runs-on: ubuntu-latest
 
     steps:
