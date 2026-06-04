@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 14
     REFRESH_COOKIE_NAME: str = "refresh_token"
+    REFRESH_COOKIE_PATH: str = "/api/v1/auth"
     EMAIL_VERIFICATION_CODE_TTL_SECONDS: int = 300
     EMAIL_VERIFIED_TTL_SECONDS: int = 1800
 

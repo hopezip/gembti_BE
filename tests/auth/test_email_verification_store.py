@@ -3,7 +3,10 @@ from collections.abc import Iterator
 import pytest
 
 from app.auth import email_verification_store
+from app.auth.models import EmailVerificationPurpose
 from app.core.config import settings
+
+PURPOSE = EmailVerificationPurpose.SIGNUP
 
 
 class FakeRedis:
@@ -41,16 +44,16 @@ def fake_redis(monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeRedis]:
 
 def test_email_keys_are_normalized() -> None:
     assert (
-        email_verification_store.code_key(" Test@Example.COM ")
-        == "auth:email:code:test@example.com"
+        email_verification_store.code_key(" Test@Example.COM ", PURPOSE)
+        == "auth:email:code:SIGNUP:test@example.com"
     )
 
 
 @pytest.mark.asyncio
 async def test_save_verification_code_stores_hash(fake_redis: FakeRedis) -> None:
-    await email_verification_store.save_verification_code("test@example.com", "123456")
+    await email_verification_store.save_verification_code("test@example.com", PURPOSE, "123456")
 
-    key = email_verification_store.code_key("test@example.com")
+    key = email_verification_store.code_key("test@example.com", PURPOSE)
     assert fake_redis.values[key] != "123456"
     assert fake_redis.expires[key] == settings.EMAIL_VERIFICATION_CODE_TTL_SECONDS
 
@@ -58,17 +61,17 @@ async def test_save_verification_code_stores_hash(fake_redis: FakeRedis) -> None
 @pytest.mark.asyncio
 async def test_verify_and_consume_email(fake_redis: FakeRedis) -> None:
     email = "test@example.com"
-    await email_verification_store.save_verification_code(email, "123456")
+    await email_verification_store.save_verification_code(email, PURPOSE, "123456")
 
-    assert await email_verification_store.verify_email_code(email, "123456") is True
-    assert email_verification_store.code_key(email) not in fake_redis.values
-    assert await email_verification_store.consume_verified_email(email) is True
-    assert await email_verification_store.consume_verified_email(email) is False
+    assert await email_verification_store.verify_email_code(email, PURPOSE, "123456") is True
+    assert email_verification_store.code_key(email, PURPOSE) not in fake_redis.values
+    assert await email_verification_store.consume_verified_email(email, PURPOSE) is True
+    assert await email_verification_store.consume_verified_email(email, PURPOSE) is False
 
 
 @pytest.mark.asyncio
 async def test_wrong_verification_code_is_rejected(fake_redis: FakeRedis) -> None:
     email = "test@example.com"
-    await email_verification_store.save_verification_code(email, "123456")
+    await email_verification_store.save_verification_code(email, PURPOSE, "123456")
 
-    assert await email_verification_store.verify_email_code(email, "000000") is False
+    assert await email_verification_store.verify_email_code(email, PURPOSE, "000000") is False
