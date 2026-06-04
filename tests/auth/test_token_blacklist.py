@@ -1,8 +1,10 @@
 from collections.abc import Iterator
 
+from jose import jwt
 import pytest
 
 from app.auth import token_blacklist
+from app.core.config import settings
 from app.core.security import create_access_token, create_refresh_token, decode_token
 
 
@@ -53,3 +55,25 @@ async def test_refresh_token_cannot_be_access_blacklisted(fake_redis: FakeRedis)
 
     assert await token_blacklist.blacklist_access_token(token) is False
     assert await token_blacklist.is_access_token_blacklisted(token) is True
+
+
+@pytest.mark.asyncio
+async def test_invalid_token_is_rejected_without_redis_lookup(fake_redis: FakeRedis) -> None:
+    token = "invalid.token"
+
+    assert await token_blacklist.blacklist_access_token(token) is False
+    assert await token_blacklist.is_access_token_blacklisted(token) is True
+    assert fake_redis.values == {}
+
+
+@pytest.mark.asyncio
+async def test_access_token_without_required_claims_is_rejected(fake_redis: FakeRedis) -> None:
+    token = jwt.encode(
+        {"sub": "7", "type": "access"},
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM,
+    )
+
+    assert await token_blacklist.blacklist_access_token(token) is False
+    assert await token_blacklist.is_access_token_blacklisted(token) is True
+    assert fake_redis.values == {}
