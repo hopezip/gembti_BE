@@ -57,6 +57,12 @@ class TestAccessToken:
         payload = decode_token(token)
         assert isinstance(payload["jti"], str)
 
+    def test_numeric_date_claims_are_integers(self):
+        token = create_access_token(subject=1)
+        payload = decode_token(token)
+        assert isinstance(payload["iat"], int)
+        assert isinstance(payload["exp"], int)
+
     def test_expired_token_raises(self):
         token = create_access_token(subject=1, expires_delta=timedelta(seconds=-1))
         with pytest.raises(JWTError):
@@ -84,6 +90,12 @@ class TestRefreshToken:
         token = create_refresh_token(subject=1)
         payload = decode_token(token)
         assert isinstance(payload["jti"], str)
+
+    def test_numeric_date_claims_are_integers(self):
+        token = create_refresh_token(subject=1)
+        payload = decode_token(token)
+        assert isinstance(payload["iat"], int)
+        assert isinstance(payload["exp"], int)
 
     def test_expired_token_raises(self):
         token = create_refresh_token(subject=1, expires_delta=timedelta(seconds=-1))

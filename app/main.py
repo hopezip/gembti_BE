@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from app.auth.router import router as auth_router
+from app.core import model_registry as model_registry
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.middlewares import register_middlewares
