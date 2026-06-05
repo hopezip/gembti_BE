@@ -4,8 +4,9 @@ from datetime import datetime  # noqa: TC003
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, String, Text, func
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, String, Text, func, inspect
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm.attributes import NO_VALUE
 
 from app.core.database import Base
 from app.core.enums import enum_values
@@ -56,7 +57,6 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     nickname: Mapped[str] = mapped_column(String(30), unique=True, index=True, nullable=False)
-    profile_image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     bio: Mapped[str | None] = mapped_column(String(160), nullable=True)
     login_provider: Mapped[LoginProvider] = mapped_column(
         Enum(LoginProvider, name="login_provider", values_callable=enum_values),
@@ -114,6 +114,44 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+
+    def _loaded_steam_account(self) -> SteamAccount | None:
+        loaded_value = inspect(self).attrs.steam_account.loaded_value
+        if loaded_value is NO_VALUE:
+            return None
+        return loaded_value
+
+    @property
+    def steam_linked(self) -> bool:
+        return self._loaded_steam_account() is not None
+
+    @property
+    def steam_id_64(self) -> str | None:
+        steam_account = self._loaded_steam_account()
+        if steam_account is None:
+            return None
+        return str(steam_account.steam_id_64)
+
+    @property
+    def steam_avatar_url(self) -> str | None:
+        steam_account = self._loaded_steam_account()
+        if steam_account is None:
+            return None
+        return steam_account.avatar_url
+
+    @property
+    def steam_sync_status(self) -> str | None:
+        steam_account = self._loaded_steam_account()
+        if steam_account is None:
+            return None
+        return steam_account.steam_sync_status.value
+
+    @property
+    def last_synced_at(self) -> datetime | None:
+        steam_account = self._loaded_steam_account()
+        if steam_account is None:
+            return None
+        return steam_account.last_synced_at
 
 
 class EmailVerification(Base):

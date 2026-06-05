@@ -59,7 +59,6 @@ def upgrade() -> None:
     sa.Column('email', sa.String(length=255), nullable=False),
     sa.Column('password_hash', sa.String(length=255), nullable=True),
     sa.Column('nickname', sa.String(length=30), nullable=False),
-    sa.Column('profile_image_url', sa.String(length=500), nullable=True),
     sa.Column('bio', sa.String(length=160), nullable=True),
     sa.Column('login_provider', sa.Enum('email', 'steam', name='login_provider'), nullable=False),
     sa.Column('status', sa.Enum('active', 'inactive', 'withdrawn', 'deleted', name='user_status'), nullable=False),

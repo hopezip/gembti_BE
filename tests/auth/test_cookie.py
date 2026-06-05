@@ -12,7 +12,7 @@ def test_set_refresh_cookie() -> None:
     cookie = response.headers["set-cookie"]
     assert f"{settings.REFRESH_COOKIE_NAME}=refresh-token" in cookie
     assert "HttpOnly" in cookie
-    assert "Path=/auth" in cookie
+    assert f"Path={settings.REFRESH_COOKIE_PATH}" in cookie
 
 
 def test_delete_refresh_cookie() -> None:
