@@ -5,11 +5,11 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.token_blacklist import is_access_token_blacklisted
 from app.core.database import AsyncSessionLocal
 from app.core.exceptions import UnauthorizedException
 from app.core.security import decode_token
 
-# 이 파일 왜 있는지 여쭤볼 것
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
@@ -27,6 +27,8 @@ async def get_current_user_id(
         payload = decode_token(credentials.credentials)
         if payload.get("type") != "access":
             raise UnauthorizedException("액세스 토큰이 아닙니다.")
+        if await is_access_token_blacklisted(credentials.credentials):
+            raise UnauthorizedException("로그아웃된 액세스 토큰입니다.")
         user_id = payload.get("sub")
         if user_id is None:
             raise UnauthorizedException()
