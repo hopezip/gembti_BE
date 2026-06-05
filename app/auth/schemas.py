@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from enum import StrEnum
 import re
 
 from pydantic import BaseModel, EmailStr, Field, model_validator
@@ -47,6 +48,11 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class UserFlowStatus(StrEnum):
+    NEEDS_SURVEY = "NEEDS_SURVEY"
+    READY = "READY"
+
+
 class MessageResponse(BaseModel):
     message: str
 
@@ -63,6 +69,8 @@ class UserResponse(BaseModel):
     steam_avatar_url: str | None
     steam_sync_status: str | None
     last_synced_at: datetime | None
+    has_completed_survey: bool = False
+    user_flow_status: UserFlowStatus = UserFlowStatus.NEEDS_SURVEY
 
     model_config = {"from_attributes": True}
 
