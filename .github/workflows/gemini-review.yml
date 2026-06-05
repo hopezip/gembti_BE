@@ -1,4 +1,4 @@
-name: "Gemini 2.5 Direct Code Review"
+name: "Gemini 2.5 Inline Code Review"
 
 on:
   pull_request:
@@ -13,35 +13,30 @@ jobs:
   gemini-review:
     runs-on: ubuntu-latest
     steps:
-      # 1. Repository 체크아웃
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # 2. PR의 코드 변경점(Diff) 추출
       - name: Extract PR Diff
         id: get_diff
         run: |
           git diff origin/${{ github.base_ref }}...HEAD > pr_diff.txt
           echo "DIFF_SIZE=$(wc -c < pr_diff.txt)" >> $GITHUB_ENV
 
-      # 3. Python 환경 세팅
       - name: Set up Python
         if: env.DIFF_SIZE != '0'
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      # ➡️ [수정됨] 에러를 해결하기 위해 requests 모듈을 설치합니다.
       - name: Install Dependencies
         if: env.DIFF_SIZE != '0'
         run: |
           python -m pip install --upgrade pip
           pip install requests
 
-      # 4. Gemini 2.5 API 직접 호출 및 PR 댓글 작성
-      - name: Request Gemini 2.5 Review
+      - name: Request Gemini 2.5 Inline Review
         if: env.DIFF_SIZE != '0'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -57,51 +52,82 @@ jobs:
           pr_num = os.getenv('PR_NUMBER')
           repo = os.getenv('REPO')
 
-          if not api_key:
-              print('에러: GEMINI_API_KEY가 없습니다. Repository Secrets를 확인하세요.')
-              exit(1)
-
           with open('pr_diff.txt', 'r', encoding='utf-8') as f:
               diff_content = f.read()
 
           if len(diff_content) > 40000:
-              diff_content = diff_content[:40000] + '\n... (코드가 너무 길어 뒷부분은 생략되었습니다) ...'
+              diff_content = diff_content[:40000] + '\n... (생략) ...'
 
-          # Google AI Studio 공식 Gemini 2.5 API 엔드포인트 다이렉트 호출
           url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
           headers = {'Content-Type': 'application/json'}
           
-          prompt = f'당신은 시니어 백엔드 소프트웨어 엔지니어입니다. 아래 Git Diff(코드 변경 사항)를 보고, 잠재적인 버그 코드, 예외 처리 미비, 리팩토링 포인트를 꼼꼼하게 분석하여 한국어로 친절하게 깃허브 코드 리뷰 댓글을 작성해 주세요:\n\n{diff_content}'
+          # 깐깐한 백엔드 리뷰를 위한 구체적인 구조적 프롬프트 선언
+          prompt = f'''당신은 깐깐한 시니어 백엔드 소프트웨어 엔지니어입니다.
+          제공된 Git Diff를 분석하여, 단순한 컨벤션 지적이 아닌 '정말 버그가 우려되거나, 예외 처리가 빠졌거나, 보안/성능 최적화(ORM 쿼리, Pydantic 스키마 검증 등)가 필요한 중요한 부분'에만 라인별 리뷰를 달아주세요.
           
-          payload = {'contents': [{'parts': [{'text': prompt}]}]}
+          반드시 아래 지정된 JSON 포맷으로만 답변해야 하며, 다른 텍스트는 절대 포함하지 마세요.
+          줄 번호(line)는 Diff에서 새롭게 추가되거나 수정된 파일의 실제 줄 번호(정수형)여야 합니다.
+
+          JSON 포맷 예시:
+          {{
+            \"comments\": [
+              {{
+                \"path\": \"src/main.py\",
+                \"line\": 15,
+                \"body\": \"이 부분에서 발생할 수 있는 예외(Exception) 처리가 누락되었습니다. try-except 블록을 활용해 예외를 잡아주세요.\"
+              }}
+            ]
+          }}
+
+          만약 코드가 완벽해서 지적할 내용이 없다면, \"comments\" 배열을 비워두세요 ({{ \"comments\": [] }}).
+
+          [Git Diff]
+          {diff_content}'''
           
-          print('Gemini API 요청 중...')
+          # JSON 응답을 보장하도록 responseMimeType 설정
+          payload = {
+              'contents': [{'parts': [{'text': prompt}]}],
+              'generationConfig': {
+                  'responseMimeType': 'application/json'
+              }
+          }
+          
+          print('Gemini API 분석 요청 중...')
           res = requests.post(url, headers=headers, json=payload)
-          
           if res.status_code != 200:
-              print(f'Gemini API 에러 발생 ({res.status_code}):', res.text)
+              print('Gemini API 에러:', res.text)
               exit(1)
               
-          res_json = res.json()
           try:
-              review_text = res_json['candidates'][0]['content']['parts'][0]['text']
+              review_data = json.loads(res.json()['candidates'][0]['content']['parts'][0]['text'])
           except Exception as e:
-              print('Gemini 응답 파싱 실패:', res_json)
+              print('JSON 파싱 에러. Gemini의 원본 응답:', res.json())
               exit(1)
 
-          # GitHub API를 사용해 PR에 다이렉트로 댓글 등록
-          gh_url = f'https://api.github.com/repos/{repo}/issues/{pr_num}/comments'
+          comments = review_data.get('comments', [])
+          if not comments:
+              print('지적할 중요한 항목이 없어 리뷰를 생성하지 않습니다. 코드 퀄리티 굿!')
+              exit(0)
+
+          # GitHub PR Review API (라인별 인라인 리뷰 등록)
+          gh_url = f'https://api.github.com/repos/{repo}/pulls/{pr_num}/reviews'
           gh_headers = {
               'Authorization': f'token {github_token}',
               'Accept': 'application/vnd.github.v3+json'
           }
           
-          print('GitHub PR에 리뷰 댓글 작성 중...')
-          gh_res = requests.post(gh_url, headers=gh_headers, json={'body': review_text})
+          gh_payload = {
+              'body': '🤖 Gemini 2.5가 코드에서 수정이 필요한 핵심 포인트를 분석했습니다.',
+              'event': 'COMMENT',
+              'comments': comments
+          }
+          
+          print(f'{len(comments)}개의 라인별 리뷰를 GitHub에 작성 중...')
+          gh_res = requests.post(gh_url, headers=gh_headers, json=gh_payload)
           
           if gh_res.status_code not in [200, 201]:
-              print(f'GitHub 댓글 작성 실패 ({gh_res.status_code}):', gh_res.text)
+              print(f'GitHub API 에러 ({gh_res.status_code}):', gh_res.text)
               exit(1)
               
-          print('코드 리뷰 등록 성공!')
+          print('라인별 코드 리뷰 등록 성공!')
           "
