@@ -20,10 +20,14 @@ def create_user() -> User:
             email="test@example.com",
             password_hash="hashed",
             nickname="tester",
-            profile_image_url=None,
             bio=None,
             login_provider=LoginProvider.EMAIL,
             status=UserStatus.ACTIVE,
+            steam_linked=False,
+            steam_id_64=None,
+            steam_avatar_url=None,
+            steam_sync_status=None,
+            last_synced_at=None,
         ),
     )
 
@@ -46,6 +50,8 @@ async def test_issue_auth_tokens_returns_access_and_sets_refresh_cookie(
     assert decode_token(token_response.access_token)["type"] == "access"
     assert decode_token(saved[0][1])["type"] == "refresh"
     assert saved[0][1] in response.headers["set-cookie"]
+    assert token_response.user.steam_linked is False
+    assert token_response.user.steam_sync_status is None
     assert not hasattr(token_response, "refresh_token")
 
 

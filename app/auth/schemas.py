@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 import re
 
 from pydantic import BaseModel, EmailStr, Field, model_validator
@@ -55,10 +55,14 @@ class UserResponse(BaseModel):
     id: int
     email: str
     nickname: str
-    profile_image_url: str | None
     bio: str | None
     login_provider: LoginProvider
     status: UserStatus
+    steam_linked: bool
+    steam_id_64: str | None
+    steam_avatar_url: str | None
+    steam_sync_status: str | None
+    last_synced_at: datetime | None
 
     model_config = {"from_attributes": True}
 
