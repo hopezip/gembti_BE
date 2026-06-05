@@ -35,3 +35,14 @@ def test_signup_schema_rejects_invalid_request(field: str, value: object) -> Non
 
     with pytest.raises(ValidationError):
         SignupRequest.model_validate(data)
+
+
+def test_signup_schema_reports_all_missing_password_parts() -> None:
+    data = valid_signup_data()
+    data["password"] = "onlyletters"
+    data["password_confirm"] = "onlyletters"
+
+    with pytest.raises(ValidationError) as exc_info:
+        SignupRequest.model_validate(data)
+
+    assert "비밀번호에는 숫자와 특수문자가 포함되어야 합니다." in str(exc_info.value)
