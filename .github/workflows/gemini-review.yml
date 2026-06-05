@@ -13,7 +13,7 @@ jobs:
   gemini-review:
     runs-on: ubuntu-latest
     steps:
-      # 1. 최신 Node.js 24 환경을 지원하는 체크아웃 (경고 발생 없음)
+      # 1. Repository 체크아웃
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
@@ -24,15 +24,21 @@ jobs:
         id: get_diff
         run: |
           git diff origin/${{ github.base_ref }}...HEAD > pr_diff.txt
-          # 변경 사항이 있는지 용량 체크
           echo "DIFF_SIZE=$(wc -c < pr_diff.txt)" >> $GITHUB_ENV
 
-      # 3. Python 환경 선언 (외부 패키지 없이 내장 requests 모듈 활용)
+      # 3. Python 환경 세팅
       - name: Set up Python
         if: env.DIFF_SIZE != '0'
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+
+      # ➡️ [수정됨] 에러를 해결하기 위해 requests 모듈을 설치합니다.
+      - name: Install Dependencies
+        if: env.DIFF_SIZE != '0'
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
 
       # 4. Gemini 2.5 API 직접 호출 및 PR 댓글 작성
       - name: Request Gemini 2.5 Review
@@ -58,12 +64,10 @@ jobs:
           with open('pr_diff.txt', 'r', encoding='utf-8') as f:
               diff_content = f.read()
 
-          # 글자 수 제한 안전장치 (너무 길면 잘라서 전송)
           if len(diff_content) > 40000:
               diff_content = diff_content[:40000] + '\n... (코드가 너무 길어 뒷부분은 생략되었습니다) ...'
 
           # Google AI Studio 공식 Gemini 2.5 API 엔드포인트 다이렉트 호출
-          # 원하는 모델에 따라 gemini-2.5-flash 또는 gemini-2.5-pro 사용 가능
           url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
           headers = {'Content-Type': 'application/json'}
           
