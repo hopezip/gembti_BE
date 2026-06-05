@@ -23,15 +23,23 @@ async def get_current_user_id(
 ) -> int:
     if credentials is None:
         raise UnauthorizedException()
+
     try:
         payload = decode_token(credentials.credentials)
-        if payload.get("type") != "access":
-            raise UnauthorizedException("액세스 토큰이 아닙니다.")
-        if await is_access_token_blacklisted(credentials.credentials):
-            raise UnauthorizedException("로그아웃된 액세스 토큰입니다.")
-        user_id = payload.get("sub")
-        if user_id is None:
-            raise UnauthorizedException()
+    except JWTError:
+        raise UnauthorizedException("유효하지 않은 토큰입니다.") from None
+
+    if payload.get("type") != "access":
+        raise UnauthorizedException("액세스 토큰이 아닙니다.")
+
+    if await is_access_token_blacklisted(credentials.credentials):
+        raise UnauthorizedException("로그아웃된 액세스 토큰입니다.")
+
+    user_id = payload.get("sub")
+    if user_id is None:
+        raise UnauthorizedException()
+
+    try:
         return int(user_id)
-    except (JWTError, ValueError):
+    except ValueError:
         raise UnauthorizedException("유효하지 않은 토큰입니다.") from None
