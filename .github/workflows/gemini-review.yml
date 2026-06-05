@@ -1,4 +1,4 @@
-name: "Gemini 2.5 Direct Code Review"
+name: "Gemini 2.5 Strict Changes-Only Review"
 
 on:
   pull_request:
@@ -13,35 +13,34 @@ jobs:
   gemini-review:
     runs-on: ubuntu-latest
     steps:
-      # 1. Repository 체크아웃
+      # 1. 저장소 체크아웃
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # 2. PR의 코드 변경점(Diff) 추출
+      # 2. PR 변경점(Diff) 추출
       - name: Extract PR Diff
         id: get_diff
         run: |
           git diff origin/${{ github.base_ref }}...HEAD > pr_diff.txt
           echo "DIFF_SIZE=$(wc -c < pr_diff.txt)" >> $GITHUB_ENV
 
-      # 3. Python 환경 세팅
+      # 3. Python 환경 세팅 및 의존성 설치
       - name: Set up Python
         if: env.DIFF_SIZE != '0'
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      # ➡️ [수정됨] 에러를 해결하기 위해 requests 모듈을 설치합니다.
       - name: Install Dependencies
         if: env.DIFF_SIZE != '0'
         run: |
           python -m pip install --upgrade pip
           pip install requests
 
-      # 4. Gemini 2.5 API 직접 호출 및 PR 댓글 작성
-      - name: Request Gemini 2.5 Review
+      # 4. 정밀 파싱 및 Gemini 리뷰 실행 스크립트 생성
+      - name: Run Strict Code Review
         if: env.DIFF_SIZE != '0'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -49,59 +48,145 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         run: |
-          python -c "
-          import os, requests, json
+          cat << 'EOF' > gemini_strict_review.py
+          import os, requests, json, re
 
+          # 환경 변수를 가져온 뒤, 혹시 모를 앞뒤 공백이나 줄바꿈(\n, \r)을 완전히 제거합니다.
           api_key = os.getenv('GEMINI_API_KEY')
+          if api_key:
+              api_key = api_key.strip().replace('\r', '').replace('\n', '')
+              
           github_token = os.getenv('GITHUB_TOKEN')
           pr_num = os.getenv('PR_NUMBER')
           repo = os.getenv('REPO')
 
           if not api_key:
-              print('에러: GEMINI_API_KEY가 없습니다. Repository Secrets를 확인하세요.')
+              print('에러: GEMINI_API_KEY가 비어있거나 올바르지 않습니다.')
               exit(1)
 
           with open('pr_diff.txt', 'r', encoding='utf-8') as f:
-              diff_content = f.read()
+              diff_text = f.read()
 
-          if len(diff_content) > 40000:
-              diff_content = diff_content[:40000] + '\n... (코드가 너무 길어 뒷부분은 생략되었습니다) ...'
+          # --- Git Diff를 파싱하여 실제 변경된 라인만 추출 ---
+          lines = diff_text.splitlines()
+          current_file = None
+          new_line_num = 0
+          valid_changes = []
+          valid_line_map = {}
 
-          # Google AI Studio 공식 Gemini 2.5 API 엔드포인트 다이렉트 호출
-          url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
-          headers = {'Content-Type': 'application/json'}
-          
-          prompt = f'당신은 시니어 백엔드 소프트웨어 엔지니어입니다. 아래 Git Diff(코드 변경 사항)를 보고, 잠재적인 버그 코드, 예외 처리 미비, 리팩토링 포인트를 꼼꼼하게 분석하여 한국어로 친절하게 깃허브 코드 리뷰 댓글을 작성해 주세요:\n\n{diff_content}'
-          
-          payload = {'contents': [{'parts': [{'text': prompt}]}]}
-          
-          print('Gemini API 요청 중...')
-          res = requests.post(url, headers=headers, json=payload)
-          
-          if res.status_code != 200:
-              print(f'Gemini API 에러 발생 ({res.status_code}):', res.text)
-              exit(1)
+          for line in lines:
+              if line.startswith('+++ b/'):
+                  current_file = line[6:]
+                  continue
+              elif line.startswith('@@ '):
+                  match = re.search(r'\+(\d+)', line)
+                  if match:
+                      new_line_num = int(match.group(1))
+                  continue
               
-          res_json = res.json()
-          try:
-              review_text = res_json['candidates'][0]['content']['parts'][0]['text']
-          except Exception as e:
-              print('Gemini 응답 파싱 실패:', res_json)
+              if current_file:
+                  if line.startswith('+') and not line.startswith('+++'):
+                      valid_changes.append({
+                          'path': current_file,
+                          'line': new_line_num,
+                          'content': line[1:]
+                      })
+                      valid_line_map[(current_file, new_line_num)] = True
+                      new_line_num += 1
+                  elif line.startswith(' '):
+                      new_line_num += 1
+
+          if not valid_changes:
+              print("이번 PR에서 새로 추가되거나 수정된 코드 라인이 없습니다.")
+              exit(0)
+
+          changes_json_str = json.dumps(valid_changes, ensure_ascii=False, indent=2)
+          
+          prompt = f"""당신은 시니어 백엔드 소프트웨어 엔지니어입니다.
+          아래 JSON 데이터는 이번 PR에서 '실제 새롭게 추가되거나 수정된 코드 라인들'의 목록입니다.
+          
+          이 목록에 지정된 파일 경로('path')와 줄 번호('line')만 검토 대상으로 삼아주세요.
+          백엔드 관점에서 정말로 버그 가능성이 높거나, 예외 처리 누락, 성능 저하(비효율적인 ORM 쿼리 등), 보안 문제가 있는 핵심 포인트만 골라 인라인 리뷰를 작성해 주세요.
+          
+          [필수 준수 규칙]
+          1. 오직 아래 목록에 명시된 'path'와 'line' 조합만 결과에 사용해야 합니다. 절대 목록에 없는 줄 번호를 임의로 추측하거나 창작하지 마세요.
+          2. 단순 스타일 지적이나 사소한 의견은 제외하고, 수정이 꼭 필요한 부분만 포함하세요. 지적할 게 없다면 "comments" 배열을 비워두세요.
+          3. 마크다운 기호(```json 등)를 완전히 배제하고, 오직 순수한 JSON 포맷으로만 답변하세요.
+
+          JSON 반환 포맷:
+          {{
+            "comments": [
+              {{
+                "path": "파일경로",
+                "line": 줄번호(정수),
+                "body": "수정이 필요한 이유와 구체적인 리팩토링 가이드를 한국어로 작성"
+              }}
+            ]
+          }}
+
+          [리뷰 대상 변경 코드 목록]
+          {changes_json_str}"""
+
+          # URL 주소를 빌드한 뒤 다시 한번 strip()으로 공백을 닦아냅니다.
+          url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
+          url = url.strip()
+          
+          headers = {'Content-Type': 'application/json'}
+          payload = {
+              'contents': [{'parts': [{'text': prompt}]}],
+              'generationConfig': {'responseMimeType': 'application/json'}
+          }
+
+          print('Gemini 2.5에게 변경분 정밀 검수 요청 중...')
+          res = requests.post(url, headers=headers, json=payload)
+          if res.status_code != 200:
+              print('Gemini API 에러:', res.text)
               exit(1)
 
-          # GitHub API를 사용해 PR에 다이렉트로 댓글 등록
-          gh_url = f'https://api.github.com/repos/{repo}/issues/{pr_num}/comments'
+          try:
+              response_text = res.json()['candidates'][0]['content']['parts'][0]['text']
+              review_data = json.loads(response_text)
+          except Exception as e:
+              print('JSON 파싱 실패. Gemini 원본 응답:', res.text)
+              exit(1)
+
+          comments = review_data.get('comments', [])
+          filtered_comments = []
+          for c in comments:
+              p = c.get('path')
+              l = c.get('line')
+              b = c.get('body')
+              if p and l and b and (p, int(l)) in valid_line_map:
+                  filtered_comments.append({
+                      'path': p,
+                      'line': int(l),
+                      'body': b,
+                      'side': 'RIGHT'
+                  })
+
+          if not filtered_comments:
+              print('검수 완료: 크리티컬한 수정 필요 사항이 없습니다.')
+              exit(0)
+
+          # GitHub PR에 라인별 리뷰 등록
+          gh_url = f'https://api.github.com/repos/{repo}/pulls/{pr_num}/reviews'
           gh_headers = {
               'Authorization': f'token {github_token}',
               'Accept': 'application/vnd.github.v3+json'
           }
+          gh_payload = {
+              'body': '🤖 Gemini 2.5가 이번 PR의 실제 변경 라인만 타겟팅하여 정밀 검수를 완료했습니다.',
+              'event': 'COMMENT',
+              'comments': filtered_comments
+          }
           
-          print('GitHub PR에 리뷰 댓글 작성 중...')
-          gh_res = requests.post(gh_url, headers=gh_headers, json={'body': review_text})
-          
+          print(f'GitHub PR에 {len(filtered_comments)}개의 유효한 라인별 리뷰를 등록합니다...')
+          gh_res = requests.post(gh_url, headers=gh_headers, json=gh_payload)
           if gh_res.status_code not in [200, 201]:
-              print(f'GitHub 댓글 작성 실패 ({gh_res.status_code}):', gh_res.text)
+              print('GitHub 리뷰 작성 실패:', gh_res.text)
               exit(1)
-              
-          print('코드 리뷰 등록 성공!')
-          "
+
+          print('변경된 내용에만 정확하게 리뷰가 달렸습니다!')
+          EOF
+          
+          python gemini_strict_review.py
