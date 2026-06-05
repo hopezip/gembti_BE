@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth.models import User
+from app.stat.models import UserStats
 
 
 async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
@@ -24,6 +25,11 @@ async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
 async def get_user_by_nickname(db: AsyncSession, nickname: str) -> User | None:
     result = await db.execute(select(User).where(User.nickname == nickname))
     return result.scalar_one_or_none()
+
+
+async def has_user_stats(db: AsyncSession, user_id: int) -> bool:
+    result = await db.execute(select(UserStats.id).where(UserStats.user_id == user_id).limit(1))
+    return result.scalar_one_or_none() is not None
 
 
 async def save_user(db: AsyncSession, user: User) -> User:

@@ -1,9 +1,11 @@
 from datetime import date, datetime
+from enum import StrEnum
 import re
 
 from pydantic import BaseModel, EmailStr, Field, model_validator
 
 from app.auth.models import EmailVerificationPurpose, Gender, LoginProvider, UserStatus
+from app.auth.password_policy import validate_password_policy
 
 
 class EmailCodeSendRequest(BaseModel):
@@ -29,12 +31,9 @@ class SignupRequest(BaseModel):
     def validate_signup(self) -> "SignupRequest":
         if self.password != self.password_confirm:
             raise ValueError("비밀번호와 비밀번호 확인이 일치하지 않습니다.")
-        if not re.search(r"[A-Za-z]", self.password):
-            raise ValueError("비밀번호에는 영문이 포함되어야 합니다.")
-        if not re.search(r"\d", self.password):
-            raise ValueError("비밀번호에는 숫자가 포함되어야 합니다.")
-        if not re.search(r"[^A-Za-z0-9]", self.password):
-            raise ValueError("비밀번호에는 특수문자가 포함되어야 합니다.")
+
+        validate_password_policy(self.password)
+
         if not re.fullmatch(r"[가-힣A-Za-z0-9]+", self.nickname):
             raise ValueError("닉네임에는 특수문자를 사용할 수 없습니다.")
         if not self.terms_agreed or not self.privacy_agreed:
@@ -45,6 +44,11 @@ class SignupRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+class UserFlowStatus(StrEnum):
+    NEEDS_SURVEY = "NEEDS_SURVEY"
+    READY = "READY"
 
 
 class MessageResponse(BaseModel):
@@ -63,6 +67,8 @@ class UserResponse(BaseModel):
     steam_avatar_url: str | None
     steam_sync_status: str | None
     last_synced_at: datetime | None
+    has_completed_survey: bool = False
+    user_flow_status: UserFlowStatus = UserFlowStatus.NEEDS_SURVEY
 
     model_config = {"from_attributes": True}
 

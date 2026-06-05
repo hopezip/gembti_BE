@@ -3,8 +3,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.cookie import delete_refresh_cookie
-from app.auth.models import User
-from app.auth.repository import get_user_by_id
+from app.auth.repository import get_user_by_id, has_user_stats
 from app.auth.schemas import (
     AccessTokenResponse,
     AuthResponse,
@@ -13,6 +12,7 @@ from app.auth.schemas import (
     LoginRequest,
     MessageResponse,
     SignupRequest,
+    UserFlowStatus,
     UserResponse,
 )
 from app.auth.service import (
@@ -96,8 +96,19 @@ async def logout_api(
 async def me_api(
     user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
-) -> User:
+) -> UserResponse:
     user = await get_user_by_id(db, user_id)
     if user is None:
         raise NotFoundException("사용자를 찾을 수 없습니다.")
-    return user
+
+    user_data = UserResponse.model_validate(user).model_dump(
+        exclude={"has_completed_survey", "user_flow_status"}
+    )
+    has_completed_survey = await has_user_stats(db, user.id)
+    return UserResponse(
+        **user_data,
+        has_completed_survey=has_completed_survey,
+        user_flow_status=(
+            UserFlowStatus.READY if has_completed_survey else UserFlowStatus.NEEDS_SURVEY
+        ),
+    )
