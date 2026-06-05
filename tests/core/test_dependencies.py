@@ -28,7 +28,7 @@ def mock_blacklist(monkeypatch: pytest.MonkeyPatch):
 @pytest.mark.asyncio
 async def test_valid_access_token():
     token = create_access_token(subject=7)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as ac:
         r = await ac.get("/me-test", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
     assert r.json()["user_id"] == 7
@@ -36,14 +36,14 @@ async def test_valid_access_token():
 
 @pytest.mark.asyncio
 async def test_no_token_returns_401():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as ac:
         r = await ac.get("/me-test")
     assert r.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_invalid_token_returns_401():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as ac:
         r = await ac.get("/me-test", headers={"Authorization": "Bearer invalid.token.here"})
     assert r.status_code == 401
 
@@ -51,7 +51,7 @@ async def test_invalid_token_returns_401():
 @pytest.mark.asyncio
 async def test_refresh_token_rejected():
     token = create_refresh_token(subject=7)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as ac:
         r = await ac.get("/me-test", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 401
 
@@ -63,6 +63,6 @@ async def test_blacklisted_access_token_rejected(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr("app.core.dependencies.is_access_token_blacklisted", blacklisted)
     token = create_access_token(subject=7)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as ac:
         r = await ac.get("/me-test", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 401

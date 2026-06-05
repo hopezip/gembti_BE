@@ -6,7 +6,7 @@ from app.main import app
 
 @pytest.mark.asyncio
 async def test_refresh_without_cookie_returns_401() -> None:
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as client:
         response = await client.post("/api/v1/auth/refresh")
 
     assert response.status_code == 401
