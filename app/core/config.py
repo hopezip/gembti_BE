@@ -65,6 +65,9 @@ class Settings(BaseSettings):
 
     # ── Steam Web API ─────────────────────────────────────
     STEAM_API_KEY: str = ""
+    BACKEND_BASE_URL: str = "http://localhost:8000"
+    FRONTEND_BASE_URL: str = "http://localhost:3000"
+    STEAM_CALLBACK_PATH: str = "/steam/callback"
 
     # ── 이메일 (fastapi-mail) ─────────────────────────────
     MAIL_USERNAME: str = ""

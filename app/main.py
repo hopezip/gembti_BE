@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.middlewares import register_middlewares
 from app.core.redis import close_redis
+from app.steam.router import router as steam_router
 
 
 @asynccontextmanager
@@ -39,7 +40,6 @@ def create_app() -> FastAPI:
     # from app.stat.router import router as stat_router
     # from app.recommend.router import router as recommend_router
     # from app.game.router import router as game_router
-    # from app.steam.router import router as steam_router
     # from app.support.router import router as support_router
     # from app.chat.router import router as chat_router
 
@@ -49,7 +49,7 @@ def create_app() -> FastAPI:
     # app.include_router(stat_router, prefix=API_PREFIX)
     # app.include_router(recommend_router, prefix=API_PREFIX)
     # app.include_router(game_router, prefix=API_PREFIX)
-    # app.include_router(steam_router, prefix=API_PREFIX)
+    app.include_router(steam_router, prefix=API_PREFIX)
     # app.include_router(support_router, prefix=API_PREFIX)
     # app.include_router(chat_router, prefix=API_PREFIX)
 
