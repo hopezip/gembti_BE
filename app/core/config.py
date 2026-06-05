@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 14
     REFRESH_COOKIE_NAME: str = "refresh_token"
+    EMAIL_VERIFICATION_CODE_TTL_SECONDS: int = 300
+    EMAIL_VERIFIED_TTL_SECONDS: int = 1800
 
     @property
     def REFRESH_TOKEN_TTL_SECONDS(self) -> int:
