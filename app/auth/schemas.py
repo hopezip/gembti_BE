@@ -79,4 +79,4 @@ class AccessTokenResponse(BaseModel):
 
 
 class AuthResponse(AccessTokenResponse):
-    user: UserResponse
+    pass

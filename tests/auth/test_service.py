@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service
 from app.auth.models import LoginProvider, User, UserStatus
-from app.auth.schemas import AuthResponse, LoginRequest, UserResponse
+from app.auth.schemas import AuthResponse, LoginRequest
 from app.core.exceptions import UnauthorizedException
 from app.core.security import decode_token
 
@@ -50,8 +50,7 @@ async def test_issue_auth_tokens_returns_access_and_sets_refresh_cookie(
     assert decode_token(token_response.access_token)["type"] == "access"
     assert decode_token(saved[0][1])["type"] == "refresh"
     assert saved[0][1] in response.headers["set-cookie"]
-    assert token_response.user.steam_linked is False
-    assert token_response.user.steam_sync_status is None
+    assert not hasattr(token_response, "user")
     assert not hasattr(token_response, "refresh_token")
 
 
@@ -83,10 +82,7 @@ async def test_login_returns_tokens_for_valid_credentials(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     user = create_user()
-    expected = AuthResponse(
-        access_token="access-token",
-        user=UserResponse.model_validate(user),
-    )
+    expected = AuthResponse(access_token="access-token")
 
     async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
         return user
