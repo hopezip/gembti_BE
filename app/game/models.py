@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from datetime import datetime, date  # noqa: TC003
+from datetime import date, datetime  # noqa: TC003
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     Enum,
     ForeignKey,
@@ -17,10 +19,8 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
-    Date
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from pgvector.sqlalchemy import Vector
 
 from app.core.database import Base
 from app.core.enums import enum_values
@@ -44,7 +44,9 @@ class Game(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     category: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     genres: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-    trait_vector: Mapped[list[float]] = mapped_column(Vector(6), nullable=False, default=[0, 0, 0, 0, 0, 0])
+    trait_vector: Mapped[list[float]] = mapped_column(
+        Vector(6), nullable=False, default=[0, 0, 0, 0, 0, 0]
+    )
     release_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     price_krw: Mapped[int | None] = mapped_column(Integer, nullable=True)
     review_score: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
