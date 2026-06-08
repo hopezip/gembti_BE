@@ -82,7 +82,6 @@ async def get_or_create_steam_user(
         user = steam_account.user
         steam_account.avatar_url = avatar_url or steam_account.avatar_url
         await db.commit()
-        await db.refresh(user)
         return user, False
 
     user = User(

@@ -2,7 +2,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.auth.models import User
 from app.steam.models import SteamAccount
 
 
@@ -12,7 +11,7 @@ async def get_steam_account_by_steam_id(
 ) -> SteamAccount | None:
     result = await db.execute(
         select(SteamAccount)
-        .options(selectinload(SteamAccount.user).selectinload(User.steam_account))
+        .options(selectinload(SteamAccount.user))
         .where(SteamAccount.steam_id_64 == steam_id_64)
     )
     return result.scalar_one_or_none()
