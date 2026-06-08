@@ -10,7 +10,7 @@ from typing import Any, Protocol
 
 CHAT_CHUNK_EMBEDDING_DIMENSIONS = 1536
 DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
-OPENAI_API_KEY_ENV = "OPENAI_API_KEY"
+OPENAI_API_KEY = "OPENAI_API_KEY"
 SUPPORT_CHAT_EMBEDDING_MODEL_ENV = "SUPPORT_CHAT_EMBEDDING_MODEL"
 SUPPORT_CHAT_EMBEDDING_DIMENSIONS_ENV = "SUPPORT_CHAT_EMBEDDING_DIMENSIONS"
 
@@ -26,93 +26,6 @@ class EmbeddingConfigurationError(RuntimeError):
 
 class EmbeddingResponseError(RuntimeError):
     """임베딩 벡터가 없거나, 형식이 잘못되었거나, 차원이 맞지 않을 때 발생한다."""
-
-
-class OpenAIEmbeddingClient:
-    """OpenAI Embeddings API를 사용하는 런타임 임베딩 클라이언트.
-
-    SDK는 실제 클라이언트를 만들어야 할 때만 지연 임포트된다. 테스트에서는
-    ``sdk_client``를 주입해 기본 테스트 스위트가 네트워크 없이 동작하도록 한다.
-    """
-
-    def __init__(
-        self,
-        *,
-        model: str = DEFAULT_OPENAI_EMBEDDING_MODEL,
-        api_key: str | None = None,
-        dimensions: int | None = CHAT_CHUNK_EMBEDDING_DIMENSIONS,
-        sdk_client: Any | None = None,
-        timeout: float | None = None,
-    ) -> None:
-        self.model = _validate_model_name(model)
-        self.dimensions = _validate_optional_dimensions(dimensions)
-        if sdk_client is None:
-            sdk_client = _create_openai_client(
-                api_key=_resolve_required_api_key(api_key),
-                timeout=timeout,
-            )
-        self._client = sdk_client
-
-    @classmethod
-    def from_env(cls, *, sdk_client: Any | None = None) -> OpenAIEmbeddingClient:
-        """환경 변수로 OpenAI 임베딩 클라이언트를 생성한다."""
-
-        configured_dimensions = _parse_optional_positive_int(
-            os.getenv(SUPPORT_CHAT_EMBEDDING_DIMENSIONS_ENV),
-            SUPPORT_CHAT_EMBEDDING_DIMENSIONS_ENV,
-        )
-        return cls(
-            model=os.getenv(
-                SUPPORT_CHAT_EMBEDDING_MODEL_ENV,
-                DEFAULT_OPENAI_EMBEDDING_MODEL,
-            ),
-            api_key=os.getenv(OPENAI_API_KEY_ENV),
-            dimensions=configured_dimensions or CHAT_CHUNK_EMBEDDING_DIMENSIONS,
-            sdk_client=sdk_client,
-        )
-
-    def embed_text(self, text: str) -> list[float]:
-        normalized_text = text.strip()
-        if not normalized_text:
-            raise ValueError("text must not be blank")
-
-        request: dict[str, Any] = {
-            "model": self.model,
-            "input": normalized_text,
-            "encoding_format": "float",
-        }
-        if self.dimensions is not None:
-            request["dimensions"] = self.dimensions
-
-        response = self._client.embeddings.create(**request)
-        return _extract_embedding(response, expected_dimensions=self.dimensions)
-
-
-class FakeEmbeddingClient:
-    """테스트용 결정론적·네트워크 비의존 임베딩 클라이언트."""
-
-    def __init__(self, dimensions: int = CHAT_CHUNK_EMBEDDING_DIMENSIONS) -> None:
-        if dimensions <= 0:
-            raise ValueError("dimensions must be greater than 0")
-        self.dimensions = dimensions
-
-    def embed_text(self, text: str) -> list[float]:
-        normalized_text = text.strip()
-        if not normalized_text:
-            return [0.0] * self.dimensions
-        return [
-            self._value_for_dimension(normalized_text, index) for index in range(self.dimensions)
-        ]
-
-    @staticmethod
-    def _value_for_dimension(text: str, index: int) -> float:
-        digest = hashlib.blake2b(
-            f"{index}\0{text}".encode(),
-            digest_size=8,
-            person=b"chatfake",
-        ).digest()
-        raw_value = int.from_bytes(digest, byteorder="big", signed=False)
-        return (raw_value / ((1 << 64) - 1)) * 2.0 - 1.0
 
 
 def validate_embedding_dimensions(
@@ -151,10 +64,10 @@ def _validate_optional_dimensions(dimensions: int | None) -> int | None:
 
 
 def _resolve_required_api_key(api_key: str | None) -> str:
-    resolved_api_key = api_key or os.getenv(OPENAI_API_KEY_ENV)
+    resolved_api_key = api_key or os.getenv(OPENAI_API_KEY)
     if resolved_api_key is None or not resolved_api_key.strip():
         raise EmbeddingConfigurationError(
-            f"{OPENAI_API_KEY_ENV} is required to create OpenAIEmbeddingClient"
+            f"{OPENAI_API_KEY} is required to create OpenAIEmbeddingClient"
         )
     return resolved_api_key
 
@@ -212,6 +125,93 @@ def _extract_embedding(response: Any, *, expected_dimensions: int | None) -> lis
             f"embedding response expected {expected_dimensions} dimensions, got {len(vector)}"
         )
     return vector
+
+
+class OpenAIEmbeddingClient:
+    """OpenAI Embeddings API를 사용하는 런타임 임베딩 클라이언트.
+
+    SDK는 실제 클라이언트를 만들어야 할 때만 지연 임포트된다. 테스트에서는
+    ``sdk_client``를 주입해 기본 테스트 스위트가 네트워크 없이 동작하도록 한다.
+    """
+
+    def __init__(
+        self,
+        *,
+        model: str = DEFAULT_OPENAI_EMBEDDING_MODEL,
+        api_key: str | None = None,
+        dimensions: int | None = CHAT_CHUNK_EMBEDDING_DIMENSIONS,
+        sdk_client: Any | None = None,
+        timeout: float | None = None,
+    ) -> None:
+        self.model = _validate_model_name(model)
+        self.dimensions = _validate_optional_dimensions(dimensions)
+        if sdk_client is None:
+            sdk_client = _create_openai_client(
+                api_key=_resolve_required_api_key(api_key),
+                timeout=timeout,
+            )
+        self._client = sdk_client
+
+    @classmethod
+    def from_env(cls, *, sdk_client: Any | None = None) -> OpenAIEmbeddingClient:
+        """환경 변수로 OpenAI 임베딩 클라이언트를 생성한다."""
+
+        configured_dimensions = _parse_optional_positive_int(
+            os.getenv(SUPPORT_CHAT_EMBEDDING_DIMENSIONS_ENV),
+            SUPPORT_CHAT_EMBEDDING_DIMENSIONS_ENV,
+        )
+        return cls(
+            model=os.getenv(
+                SUPPORT_CHAT_EMBEDDING_MODEL_ENV,
+                DEFAULT_OPENAI_EMBEDDING_MODEL,
+            ),
+            api_key=os.getenv(OPENAI_API_KEY),
+            dimensions=configured_dimensions or CHAT_CHUNK_EMBEDDING_DIMENSIONS,
+            sdk_client=sdk_client,
+        )
+
+    def embed_text(self, text: str) -> list[float]:
+        normalized_text = text.strip()
+        if not normalized_text:
+            raise ValueError("text must not be blank")
+
+        request: dict[str, Any] = {
+            "model": self.model,
+            "input": normalized_text,
+            "encoding_format": "float",
+        }
+        if self.dimensions is not None:
+            request["dimensions"] = self.dimensions
+
+        response = self._client.embeddings.create(**request)
+        return _extract_embedding(response, expected_dimensions=self.dimensions)
+
+
+class FakeEmbeddingClient:
+    """테스트용 결정론적·네트워크 비의존 임베딩 클라이언트."""
+
+    def __init__(self, dimensions: int = CHAT_CHUNK_EMBEDDING_DIMENSIONS) -> None:
+        if dimensions <= 0:
+            raise ValueError("dimensions must be greater than 0")
+        self.dimensions = dimensions
+
+    def embed_text(self, text: str) -> list[float]:
+        normalized_text = text.strip()
+        if not normalized_text:
+            return [0.0] * self.dimensions
+        return [
+            self._value_for_dimension(normalized_text, index) for index in range(self.dimensions)
+        ]
+
+    @staticmethod
+    def _value_for_dimension(text: str, index: int) -> float:
+        digest = hashlib.blake2b(
+            f"{index}\0{text}".encode(),
+            digest_size=8,
+            person=b"chatfake",
+        ).digest()
+        raw_value = int.from_bytes(digest, byteorder="big", signed=False)
+        return (raw_value / ((1 << 64) - 1)) * 2.0 - 1.0
 
 
 __all__ = [
