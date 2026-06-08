@@ -81,7 +81,7 @@ async def get_or_create_steam_user(
     if steam_account is not None:
         user = steam_account.user
         steam_account.avatar_url = avatar_url or steam_account.avatar_url
-        await db.commit()
+        await db.flush()
         return user, False
 
     user = User(
@@ -103,8 +103,7 @@ async def get_or_create_steam_user(
             steam_sync_status=SteamSyncStatus.FAILED,
         ),
     )
-    await db.commit()
-    await db.refresh(user)
+    await db.flush()
     return user, True
 
 
@@ -134,6 +133,7 @@ async def complete_steam_login(
         steam_id_64=steam_id_64,
         avatar_url=avatar_url,
     )
+    await db.commit()
     await issue_auth_tokens(response, user)
     return user, is_new_user
 
@@ -164,7 +164,6 @@ async def link_steam_account(
             steam_sync_status=SteamSyncStatus.FAILED,
         ),
     )
-    await db.commit()
 
     return SteamLinkResponse(
         steam_linked=True,

@@ -54,7 +54,11 @@ async def get_player_summary(steam_id_64: int) -> dict[str, Any] | None:
         except httpx.HTTPError:
             return None
 
-    players = response.json().get("response", {}).get("players", [])
+    try:
+        players = response.json().get("response", {}).get("players", [])
+    except ValueError:
+        return None
+
     if not players:
         return None
     return players[0]

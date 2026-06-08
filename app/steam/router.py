@@ -3,7 +3,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user_id, get_db
-from app.core.exceptions import AppException
+from app.core.exceptions import BadRequestException
 from app.steam.schemas import SteamLinkRequest, SteamLinkResponse, SteamStatusResponse
 from app.steam.service import (
     build_steam_login_url,
@@ -36,7 +36,7 @@ async def steam_auth_callback_api(
             response=response,
             params=dict(request.query_params),
         )
-    except AppException:
+    except BadRequestException:
         response.headers["location"] = get_frontend_steam_callback_url(
             result="failed",
             reason="steam_auth_failed",
@@ -58,7 +58,9 @@ async def steam_link_api(
     user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> SteamLinkResponse:
-    return await link_steam_account(db, user_id, request.steam_id)
+    response = await link_steam_account(db, user_id, request.steam_id)
+    await db.commit()
+    return response
 
 
 @router.get("/steam/status", response_model=SteamStatusResponse)
