@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime  # noqa: TC003
+from datetime import datetime, date  # noqa: TC003
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -17,8 +17,10 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    Date
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from pgvector.sqlalchemy import Vector
 
 from app.core.database import Base
 from app.core.enums import enum_values
@@ -42,6 +44,8 @@ class Game(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     category: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     genres: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    trait_vector: Mapped[list[float]] = mapped_column(Vector(6), nullable=False, default=[0, 0, 0, 0, 0, 0])
+    release_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     price_krw: Mapped[int | None] = mapped_column(Integer, nullable=True)
     review_score: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
     review_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -58,8 +62,6 @@ class Game(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
-    original_price_krw: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    discount_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_free: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_korean_supported: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     current_players: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -68,28 +70,6 @@ class Game(Base):
         nullable=True,
     )
     steam_detail_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-
-class GameTag(Base):
-    __tablename__ = "game_tags"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    game_id: Mapped[int] = mapped_column(
-        ForeignKey("games.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    tag_name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    combat_weight: Mapped[float] = mapped_column(Numeric(3, 2), nullable=False, default=0)
-    strategy_weight: Mapped[float] = mapped_column(Numeric(3, 2), nullable=False, default=0)
-    cooperation_weight: Mapped[float] = mapped_column(Numeric(3, 2), nullable=False, default=0)
-    exploration_weight: Mapped[float] = mapped_column(Numeric(3, 2), nullable=False, default=0)
-    growth_weight: Mapped[float] = mapped_column(Numeric(3, 2), nullable=False, default=0)
-    healing_weight: Mapped[float] = mapped_column(Numeric(3, 2), nullable=False, default=0)
-    is_negative_trigger: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-
-    game: Mapped[Game] = relationship("Game")
 
 
 class GameReview(Base):
