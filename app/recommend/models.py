@@ -5,15 +5,11 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
-    JSON,
-    Boolean,
     DateTime,
     Enum,
     ForeignKey,
     Integer,
     Numeric,
-    String,
-    Text,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
