@@ -48,8 +48,7 @@ class UserStats(Base):
         nullable=True,
     )
     negative_tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-    primary_tag_1: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    primary_tag_2: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    primary_tag: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

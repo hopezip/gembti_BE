@@ -36,7 +36,7 @@ class PartyPost(Base):
     )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
-    schedule: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    schedule: Mapped[str | None] = mapped_column(String(200), nullable=True)
     representative_stat_tag: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

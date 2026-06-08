@@ -5,15 +5,11 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
-    JSON,
-    Boolean,
     DateTime,
     Enum,
     ForeignKey,
     Integer,
     Numeric,
-    String,
-    Text,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -53,8 +49,8 @@ class EvidenceStatus(StrEnum):
     DEPRECATED = "deprecated"
 
 
-class Recommendation(Base):
-    __tablename__ = "recommendations"
+class RecommendationItem(Base):
+    __tablename__ = "recommendation_items"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(
@@ -80,12 +76,8 @@ class Recommendation(Base):
         nullable=False,
         index=True,
     )
-    match_score: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
-    recommendation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    is_warning: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    warning_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    conflicting_tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    similarity_score: Mapped[float] = mapped_column(Numeric(10, 6), nullable=False)
+    similarity_rank: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -95,47 +87,6 @@ class Recommendation(Base):
     user: Mapped[User] = relationship("User")
     user_stats: Mapped[UserStats] = relationship("UserStats")
     game: Mapped[Game] = relationship("Game")
-
-
-class RecommendationAudit(Base):
-    __tablename__ = "recommendation_audits"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    run_id: Mapped[int | None] = mapped_column(
-        ForeignKey("recommendations.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-    source_type: Mapped[RecommendationSourceType] = mapped_column(
-        Enum(
-            RecommendationSourceType,
-            name="recommendation_audit_source_type",
-            values_callable=enum_values,
-        ),
-        nullable=False,
-    )
-    snapshot_combat: Mapped[int] = mapped_column(Integer, nullable=False)
-    snapshot_strategy: Mapped[int] = mapped_column(Integer, nullable=False)
-    snapshot_cooperation: Mapped[int] = mapped_column(Integer, nullable=False)
-    snapshot_exploration: Mapped[int] = mapped_column(Integer, nullable=False)
-    snapshot_growth: Mapped[int] = mapped_column(Integer, nullable=False)
-    snapshot_healing: Mapped[int] = mapped_column(Integer, nullable=False)
-    result_json: Mapped[dict] = mapped_column(JSON, nullable=False)
-    excluded_game_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-    override_filters: Mapped[list | None] = mapped_column(JSON, nullable=True, default=list)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-    )
-
-    user: Mapped[User] = relationship("User")
-    recommendation: Mapped[Recommendation | None] = relationship("Recommendation")
 
 
 class RecommendationFeedback(Base):
@@ -148,7 +99,7 @@ class RecommendationFeedback(Base):
         index=True,
     )
     recommendation_id: Mapped[int] = mapped_column(
-        ForeignKey("recommendations.id", ondelete="CASCADE"),
+        ForeignKey("recommendation_items.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -168,50 +119,5 @@ class RecommendationFeedback(Base):
     )
 
     user: Mapped[User] = relationship("User")
-    recommendation: Mapped[Recommendation] = relationship("Recommendation")
+    recommendation: Mapped[RecommendationItem] = relationship("RecommendationItem")
     game: Mapped[Game] = relationship("Game")
-
-
-class RagDocument(Base):
-    __tablename__ = "rag_documents"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    game_id: Mapped[int | None] = mapped_column(
-        ForeignKey("games.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-    doc_type: Mapped[RagDocumentType] = mapped_column(
-        Enum(RagDocumentType, name="rag_document_type", values_callable=enum_values),
-        nullable=False,
-    )
-    title: Mapped[str] = mapped_column(String(300), nullable=False)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    evidence_status: Mapped[EvidenceStatus] = mapped_column(
-        Enum(EvidenceStatus, name="rag_evidence_status", values_callable=enum_values),
-        nullable=False,
-        default=EvidenceStatus.REVIEWED,
-    )
-    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    embedding_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    vector_namespace: Mapped[str] = mapped_column(
-        String(100),
-        nullable=False,
-        default="recommendation_evidence",
-    )
-    vector_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
-
-    game: Mapped[Game | None] = relationship("Game")
