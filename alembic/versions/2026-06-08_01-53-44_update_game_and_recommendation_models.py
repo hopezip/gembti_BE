@@ -19,6 +19,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+
     recommendation_source_type = postgresql.ENUM(
         'ONLY_SURVEY',
         'HYBRID_STEAM',
