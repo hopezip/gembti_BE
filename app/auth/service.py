@@ -24,7 +24,6 @@ from app.auth.schemas import (
     AuthResponse,
     LoginRequest,
     SignupRequest,
-    UserResponse,
 )
 from app.auth.token_blacklist import blacklist_access_token
 from app.core.exceptions import (
@@ -51,7 +50,7 @@ async def issue_auth_tokens(
     await save_refresh_token(user.id, refresh_token, provider)
     set_refresh_cookie(response, refresh_token)
 
-    return AuthResponse(access_token=access_token, user=UserResponse.model_validate(user))
+    return AuthResponse(access_token=access_token)
 
 
 async def send_email_code(
