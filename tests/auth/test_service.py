@@ -6,9 +6,9 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service
-from app.auth.models import LoginProvider, User, UserStatus
-from app.auth.schemas import AuthResponse, LoginRequest
-from app.core.exceptions import UnauthorizedException
+from app.auth.models import LoginProvider, User, UserStatus, UserWithdrawalStatus
+from app.auth.schemas import AuthResponse, LoginRequest, WithdrawRequest
+from app.core.exceptions import BadRequestException, UnauthorizedException
 from app.core.security import decode_token
 
 
@@ -118,3 +118,149 @@ async def test_login_hides_invalid_credential_reason(
             Response(),
             LoginRequest(email="missing@example.com", password="Password!1"),
         )
+
+
+@pytest.mark.asyncio
+async def test_withdraw_user_soft_deletes_and_clears_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = create_user()
+    added: list[object] = []
+    committed: list[bool] = []
+    deleted_all: list[int] = []
+    blacklisted: list[str] = []
+    deleted_refresh: list[tuple[str, int | None]] = []
+
+    class FakeSession:
+        def add(self, value: object) -> None:
+            added.append(value)
+
+        async def commit(self) -> None:
+            committed.append(True)
+
+    async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
+        return user
+
+    async def get_requested_withdrawal_by_user_id(db: AsyncSession, user_id: int):
+        return None
+
+    async def delete_all_refresh_tokens_for_user(user_id: int) -> None:
+        deleted_all.append(user_id)
+
+    async def blacklist_access_token(token: str) -> bool:
+        blacklisted.append(token)
+        return True
+
+    async def delete_refresh_token(token: str, user_id: int | None = None) -> None:
+        deleted_refresh.append((token, user_id))
+
+    monkeypatch.setattr(service, "get_user_by_id", get_user_by_id)
+    monkeypatch.setattr(
+        service,
+        "get_requested_withdrawal_by_user_id",
+        get_requested_withdrawal_by_user_id,
+    )
+    monkeypatch.setattr(service, "verify_password", lambda plain, hashed: True)
+    monkeypatch.setattr(
+        service,
+        "delete_all_refresh_tokens_for_user",
+        delete_all_refresh_tokens_for_user,
+    )
+    monkeypatch.setattr(service, "blacklist_access_token", blacklist_access_token)
+    monkeypatch.setattr(service, "delete_refresh_token", delete_refresh_token)
+
+    response = Response()
+    result = await service.withdraw_user(
+        db=cast("AsyncSession", FakeSession()),
+        response=response,
+        user_id=7,
+        access_token="access-token",
+        refresh_token="refresh-token",
+        request=WithdrawRequest(password="Password!1", reason="reason"),
+    )
+
+    assert user.status == UserStatus.WITHDRAWN
+    assert user.withdrawn_at is not None
+    assert user.hard_delete_after == result.hard_delete_after
+    assert added
+    assert committed == [True]
+    assert deleted_all == [7]
+    assert blacklisted == ["access-token"]
+    assert deleted_refresh == [("refresh-token", 7)]
+    assert "Max-Age=0" in response.headers["set-cookie"]
+
+
+@pytest.mark.asyncio
+async def test_withdraw_user_requires_email_password(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = create_user()
+
+    async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
+        return user
+
+    monkeypatch.setattr(service, "get_user_by_id", get_user_by_id)
+
+    with pytest.raises(BadRequestException, match="비밀번호가 일치하지 않습니다."):
+        await service.withdraw_user(
+            db=cast("AsyncSession", object()),
+            response=Response(),
+            user_id=7,
+            access_token="access-token",
+            refresh_token=None,
+            request=WithdrawRequest(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_cleanup_expired_withdrawn_users_anonymizes_user(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = create_user()
+    user.status = UserStatus.WITHDRAWN
+    withdrawal_request = SimpleNamespace(
+        user=user,
+        status=UserWithdrawalStatus.REQUESTED,
+        hard_deleted_at=None,
+    )
+    executed: list[object] = []
+    committed: list[bool] = []
+    deleted_all: list[int] = []
+
+    class FakeSession:
+        async def execute(self, statement: object) -> None:
+            executed.append(statement)
+
+        async def commit(self) -> None:
+            committed.append(True)
+
+    async def get_expired_withdrawal_requests(db: AsyncSession, now):
+        return [withdrawal_request]
+
+    async def delete_all_refresh_tokens_for_user(user_id: int) -> None:
+        deleted_all.append(user_id)
+
+    monkeypatch.setattr(
+        service,
+        "get_expired_withdrawal_requests",
+        get_expired_withdrawal_requests,
+    )
+    monkeypatch.setattr(
+        service,
+        "delete_all_refresh_tokens_for_user",
+        delete_all_refresh_tokens_for_user,
+    )
+
+    count = await service.cleanup_expired_withdrawn_users(cast("AsyncSession", FakeSession()))
+
+    assert count == 1
+    assert user.status == UserStatus.DELETED
+    assert user.email == "deleted_7@deleted.local"
+    assert user.nickname == "deleted_user_7"
+    assert user.password_hash is None
+    assert user.deleted_at is not None
+    assert withdrawal_request.status == UserWithdrawalStatus.HARD_DELETED
+    assert withdrawal_request.hard_deleted_at is not None
+    assert len(executed) == 2
+    assert committed == [True]
+    assert deleted_all == [7]

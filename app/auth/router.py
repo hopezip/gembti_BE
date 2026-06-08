@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Cookie, Depends, Response, status
+from fastapi import APIRouter, Body, Cookie, Depends, Response, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +14,8 @@ from app.auth.schemas import (
     SignupRequest,
     UserFlowStatus,
     UserResponse,
+    WithdrawRequest,
+    WithdrawResponse,
 )
 from app.auth.service import (
     login,
@@ -22,6 +24,7 @@ from app.auth.service import (
     send_email_code,
     signup,
     verify_email,
+    withdraw_user,
 )
 from app.auth.token_blacklist import blacklist_access_token
 from app.core.config import settings
@@ -111,4 +114,26 @@ async def me_api(
         user_flow_status=(
             UserFlowStatus.READY if has_completed_survey else UserFlowStatus.NEEDS_SURVEY
         ),
+    )
+
+
+@router.delete("/me", response_model=WithdrawResponse)
+async def withdraw_me_api(
+    response: Response,
+    request: WithdrawRequest = Body(default_factory=WithdrawRequest),
+    user_id: int = Depends(get_current_user_id),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    refresh_token: str | None = Cookie(default=None, alias=settings.REFRESH_COOKIE_NAME),
+    db: AsyncSession = Depends(get_db),
+) -> WithdrawResponse:
+    if credentials is None:
+        raise UnauthorizedException()
+
+    return await withdraw_user(
+        db=db,
+        response=response,
+        user_id=user_id,
+        access_token=credentials.credentials,
+        refresh_token=refresh_token,
+        request=request,
     )

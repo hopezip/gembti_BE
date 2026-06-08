@@ -7,6 +7,7 @@ celery_app = Celery(
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
     include=[
+        "app.auth.tasks",
         # 태스크 모듈 경로 추가 예시:
         # "app.chat.tasks",
         # "app.recommend.tasks",
