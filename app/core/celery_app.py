@@ -11,6 +11,7 @@ celery_app = Celery(
         # 태스크 모듈 경로 추가 예시:
         # "app.chat.tasks",
         # "app.recommend.tasks",
+        "app.steam.tasks",
     ],
 )
 

@@ -4,13 +4,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user_id, get_db
 from app.core.exceptions import BadRequestException
-from app.steam.schemas import SteamLinkRequest, SteamLinkResponse, SteamStatusResponse
+from app.steam.schemas import (
+    SteamLinkRequest,
+    SteamLinkResponse,
+    SteamRecentlyPlayedResponse,
+    SteamStatusResponse,
+    SteamSyncResponse,
+)
 from app.steam.service import (
     build_steam_login_url,
     complete_steam_login,
     get_frontend_steam_callback_url,
+    get_recently_played,
     get_steam_status,
     link_steam_account,
+    sync_steam_library,
 )
 
 router = APIRouter(tags=["Steam"])
@@ -69,3 +77,21 @@ async def steam_status_api(
     db: AsyncSession = Depends(get_db),
 ) -> SteamStatusResponse:
     return await get_steam_status(db, user_id)
+
+
+@router.post("/steam/sync", response_model=SteamSyncResponse)
+async def steam_sync_api(
+    user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> SteamSyncResponse:
+    response = await sync_steam_library(db, user_id)
+    await db.commit()
+    return response
+
+
+@router.get("/steam/recently-played", response_model=SteamRecentlyPlayedResponse)
+async def steam_recently_played_api(
+    user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> SteamRecentlyPlayedResponse:
+    return await get_recently_played(db, user_id)

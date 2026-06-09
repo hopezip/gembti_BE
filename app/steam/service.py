@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import re
 from typing import TYPE_CHECKING
 from urllib.parse import urlencode
@@ -10,23 +11,37 @@ from app.auth.service import issue_auth_tokens
 from app.core.config import settings
 from app.core.exceptions import BadRequestException, ConflictException, NotFoundException
 from app.steam.client import (
+    SteamLibraryVisibility,
     build_steam_openid_url,
+    get_owned_games,
     get_player_summary,
+    get_recently_played_games,
     verify_steam_openid,
 )
-from app.steam.models import SteamAccount, SteamSyncStatus
+from app.steam.models import SteamAccount, SteamSyncStatus, UserLibraryGame
 from app.steam.repository import (
+    get_library_games_by_user_id,
     get_steam_account_by_steam_id,
     get_steam_account_by_user_id,
     save_steam_account,
+    upsert_library_games,
 )
-from app.steam.schemas import SteamLinkResponse, SteamStatusResponse
+from app.steam.schemas import (
+    SteamLinkResponse,
+    SteamRecentlyPlayedGameResponse,
+    SteamRecentlyPlayedResponse,
+    SteamStatusResponse,
+    SteamSyncResponse,
+)
 
 if TYPE_CHECKING:
     from fastapi import Response
     from sqlalchemy.ext.asyncio import AsyncSession
 
 STEAM_CLAIMED_ID_PATTERN = re.compile(r"^https://steamcommunity\.com/openid/id/(\d{17})$")
+STEAM_NEXT_RECOMMENDATION = "RECOMMENDATION"
+STEAM_NEXT_SURVEY = "SURVEY"
+STEAM_NEXT_RETRY = "RETRY"
 
 
 def get_steam_return_to() -> str:
@@ -175,7 +190,14 @@ async def link_steam_account(
 async def get_steam_status(db: AsyncSession, user_id: int) -> SteamStatusResponse:
     steam_account = await get_steam_account_by_user_id(db, user_id)
     if steam_account is None:
-        return SteamStatusResponse(steam_linked=False)
+        return SteamStatusResponse(
+            steam_linked=False,
+            next=STEAM_NEXT_SURVEY,
+            message="Steam 계정이 연동되어 있지 않습니다.",
+        )
+
+    library_games = await get_library_games_by_user_id(db, user_id)
+    library_games_count = len(library_games)
 
     return SteamStatusResponse(
         steam_linked=True,
@@ -183,4 +205,123 @@ async def get_steam_status(db: AsyncSession, user_id: int) -> SteamStatusRespons
         steam_avatar_url=steam_account.avatar_url,
         steam_sync_status=steam_account.steam_sync_status,
         last_synced_at=steam_account.last_synced_at,
+        library_games_count=library_games_count,
+        next=get_next_step_for_sync_status(steam_account.steam_sync_status),
+        message=get_message_for_sync_status(steam_account.steam_sync_status),
     )
+
+
+async def sync_steam_library(db: AsyncSession, user_id: int) -> SteamSyncResponse:
+    steam_account = await get_steam_account_by_user_id(db, user_id)
+    if steam_account is None:
+        raise NotFoundException("Steam 계정이 연동되어 있지 않습니다.")
+
+    owned_games = await get_owned_games(steam_account.steam_id_64)
+    synced_at = datetime.now(UTC)
+
+    if owned_games.visibility == SteamLibraryVisibility.PUBLIC:
+        library_games = [
+            build_user_library_game(user_id=user_id, steam_game=steam_game, synced_at=synced_at)
+            for steam_game in owned_games.games
+        ]
+        synced_count = await upsert_library_games(db, user_id, library_games)
+        steam_account.steam_sync_status = SteamSyncStatus.SUCCESS
+        steam_account.last_synced_at = synced_at
+        await db.flush()
+        return SteamSyncResponse(
+            steam_sync_status=SteamSyncStatus.SUCCESS,
+            synced_count=synced_count,
+            last_synced_at=synced_at,
+            next=STEAM_NEXT_RECOMMENDATION,
+            message="Steam 라이브러리 동기화가 완료되었습니다.",
+        )
+
+    steam_account.steam_sync_status = map_visibility_to_sync_status(owned_games.visibility)
+    steam_account.last_synced_at = synced_at
+    await db.flush()
+    return SteamSyncResponse(
+        steam_sync_status=steam_account.steam_sync_status,
+        synced_count=0,
+        last_synced_at=synced_at,
+        next=get_next_step_for_sync_status(steam_account.steam_sync_status),
+        message=get_message_for_sync_status(steam_account.steam_sync_status),
+    )
+
+
+async def get_recently_played(db: AsyncSession, user_id: int) -> SteamRecentlyPlayedResponse:
+    steam_account = await get_steam_account_by_user_id(db, user_id)
+    if steam_account is None:
+        raise NotFoundException("Steam 계정이 연동되어 있지 않습니다.")
+
+    recent_games = await get_recently_played_games(steam_account.steam_id_64)
+    sync_status = map_visibility_to_sync_status(recent_games.visibility)
+    games = [
+        SteamRecentlyPlayedGameResponse(
+            steam_app_id=parse_steam_int(steam_game["appid"]),
+            playtime_minutes=parse_steam_int(steam_game.get("playtime_forever", 0)),
+            playtime_2weeks=parse_steam_int(steam_game.get("playtime_2weeks", 0)),
+        )
+        for steam_game in recent_games.games
+        if "appid" in steam_game
+    ]
+    return SteamRecentlyPlayedResponse(
+        steam_sync_status=sync_status,
+        games=games,
+        message=None if games else get_message_for_sync_status(sync_status),
+    )
+
+
+def build_user_library_game(
+    user_id: int,
+    steam_game: dict[str, object],
+    synced_at: datetime,
+) -> UserLibraryGame:
+    return UserLibraryGame(
+        user_id=user_id,
+        steam_app_id=parse_steam_int(steam_game["appid"]),
+        playtime_minutes=parse_steam_int(steam_game.get("playtime_forever", 0)),
+        last_played_at=parse_steam_timestamp(steam_game.get("rtime_last_played")),
+        synced_at=synced_at,
+    )
+
+
+def parse_steam_timestamp(value: object) -> datetime | None:
+    if not value:
+        return None
+    return datetime.fromtimestamp(parse_steam_int(value), tz=UTC)
+
+
+def parse_steam_int(value: object) -> int:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        return int(value)
+    return 0
+
+
+def map_visibility_to_sync_status(visibility: SteamLibraryVisibility) -> SteamSyncStatus:
+    if visibility == SteamLibraryVisibility.PUBLIC:
+        return SteamSyncStatus.SUCCESS
+    if visibility == SteamLibraryVisibility.PRIVATE:
+        return SteamSyncStatus.PRIVATE
+    if visibility == SteamLibraryVisibility.EMPTY:
+        return SteamSyncStatus.EMPTY
+    return SteamSyncStatus.FAILED
+
+
+def get_next_step_for_sync_status(sync_status: SteamSyncStatus) -> str:
+    if sync_status == SteamSyncStatus.SUCCESS:
+        return STEAM_NEXT_RECOMMENDATION
+    if sync_status in {SteamSyncStatus.PRIVATE, SteamSyncStatus.EMPTY}:
+        return STEAM_NEXT_SURVEY
+    return STEAM_NEXT_RETRY
+
+
+def get_message_for_sync_status(sync_status: SteamSyncStatus) -> str:
+    if sync_status == SteamSyncStatus.SUCCESS:
+        return "Steam 라이브러리 동기화가 완료되었습니다."
+    if sync_status == SteamSyncStatus.PRIVATE:
+        return "Steam 라이브러리가 비공개입니다. 설문 기반 추천으로 진행합니다."
+    if sync_status == SteamSyncStatus.EMPTY:
+        return "동기화할 Steam 라이브러리 게임이 없습니다. 설문 기반 추천으로 진행합니다."
+    return "Steam 라이브러리 동기화에 실패했습니다. 잠시 후 다시 시도해 주세요."
