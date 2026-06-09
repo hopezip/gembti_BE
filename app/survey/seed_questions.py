@@ -1,13 +1,21 @@
 from __future__ import annotations
 
 import asyncio
+from typing import TypedDict
 
 from sqlalchemy import select
 
 from app.core.database import AsyncSessionLocal
 from app.survey.models import StatAxis, SurveyQuestion
 
-SURVEY_QUESTIONS = [
+
+class SurveyQuestionSeed(TypedDict):
+    display_order: int
+    stat_axis: str
+    question_text: str
+
+
+SURVEY_QUESTIONS: list[SurveyQuestionSeed] = [
     {
         "display_order": 1,
         "stat_axis": "combat",
