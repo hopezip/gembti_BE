@@ -24,22 +24,52 @@ CATEGORY_WEIGHTS: dict[str, tuple[float, list[float]]] = {
     "Single-player": (1.0, [0.0, 0.0, 0.0, 0.1, 0.1, 0.1]),
 }
 
+# 대소문자·공백 차이에 대응하기 위한 정규화 lookup 테이블
+_GENRE_LOOKUP: dict[str, tuple[float, list[float]]] = {
+    k.strip().lower(): v for k, v in GENRE_WEIGHTS.items()
+}
+_CATEGORY_LOOKUP: dict[str, tuple[float, list[float]]] = {
+    k.strip().lower(): v for k, v in CATEGORY_WEIGHTS.items()
+}
+
+
+def _match(
+    value: str,
+    lookup: dict[str, tuple[float, list[float]]],
+    matched: dict[str, tuple[float, list[float]]],
+) -> None:
+    """정확한 매칭 → 없으면 부분 매칭 순으로 조회해 matched에 누적한다.
+
+    matched를 dict로 관리해 동일 키의 중복 추가를 방지한다.
+    """
+    normalized = value.strip().lower()
+
+    entry = lookup.get(normalized)
+    if entry:
+        matched[normalized] = entry
+        return
+
+    for key, val in lookup.items():
+        if key in normalized:
+            matched[key] = val
+
 
 def map_game_traits(
     genres: list[str],
     categories: list[str],
 ) -> list[tuple[float, list[float]]]:
-    """장르·카테고리를 매핑 테이블에서 조회해 매칭된 (importance, traits) 목록을 반환한다."""
-    result: list[tuple[float, list[float]]] = []
+    """장르·카테고리를 매핑 테이블에서 조회해 매칭된 (importance, traits) 목록을 반환한다.
+
+    1단계 정확한 매칭, 2단계 부분 매칭 순으로 시도한다.
+    여러 장르에서 동일한 키가 매칭돼도 중복 없이 한 번만 반영된다.
+    모두 매칭 실패 시 빈 리스트를 반환하며, vectorizer에서 균등 단위 벡터로 처리된다.
+    """
+    matched: dict[str, tuple[float, list[float]]] = {}
 
     for genre in genres:
-        entry = GENRE_WEIGHTS.get(genre)
-        if entry:
-            result.append(entry)
+        _match(genre, _GENRE_LOOKUP, matched)
 
     for category in categories:
-        entry = CATEGORY_WEIGHTS.get(category)
-        if entry:
-            result.append(entry)
+        _match(category, _CATEGORY_LOOKUP, matched)
 
-    return result
+    return list(matched.values())
