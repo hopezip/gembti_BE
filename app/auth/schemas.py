@@ -55,6 +55,17 @@ class MessageResponse(BaseModel):
     message: str
 
 
+class WithdrawRequest(BaseModel):
+    password: str | None = Field(default=None, max_length=100)
+    reason: str | None = Field(default=None, max_length=100)
+    detail: str | None = Field(default=None, max_length=1000)
+
+
+class WithdrawResponse(BaseModel):
+    message: str
+    hard_delete_after: datetime
+
+
 class UserResponse(BaseModel):
     id: int
     email: str

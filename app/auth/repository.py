@@ -1,8 +1,10 @@
+from datetime import datetime
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.auth.models import User
+from app.auth.models import User, UserStatus, UserWithdrawalRequest, UserWithdrawalStatus
 from app.stat.models import UserStats
 
 
@@ -37,3 +39,34 @@ async def save_user(db: AsyncSession, user: User) -> User:
     await db.commit()
     await db.refresh(user)
     return user
+
+
+async def get_requested_withdrawal_by_user_id(
+    db: AsyncSession,
+    user_id: int,
+) -> UserWithdrawalRequest | None:
+    result = await db.execute(
+        select(UserWithdrawalRequest).where(
+            UserWithdrawalRequest.user_id == user_id,
+            UserWithdrawalRequest.status == UserWithdrawalStatus.REQUESTED,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def get_expired_withdrawal_requests(
+    db: AsyncSession,
+    now: datetime,
+) -> list[UserWithdrawalRequest]:
+    result = await db.execute(
+        select(UserWithdrawalRequest)
+        .options(selectinload(UserWithdrawalRequest.user))
+        .join(User)
+        .where(
+            UserWithdrawalRequest.status == UserWithdrawalStatus.REQUESTED,
+            UserWithdrawalRequest.hard_delete_after <= now,
+            User.status == UserStatus.WITHDRAWN,
+            User.deleted_at.is_(None),
+        )
+    )
+    return list(result.scalars().all())
