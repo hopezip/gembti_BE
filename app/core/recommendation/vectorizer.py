@@ -39,6 +39,6 @@ def user_stats_to_vector(stats: UserStats) -> list[float]:
 
 def _normalize(vector: list[float]) -> list[float]:
     norm = math.sqrt(sum(v * v for v in vector))
-    if norm == 0.0:
-        return vector
+    if norm < 1e-9:
+        return [0.0] * len(vector)
     return [v / norm for v in vector]
