@@ -1,4 +1,4 @@
-name: "Gemini 2.5 Strict Changes-Only Review"
+name: "Gemini 3.1 Flash Lite Strict Changes-Only Review"
 
 on:
   pull_request:
@@ -8,6 +8,10 @@ on:
 permissions:
   pull-requests: write
   contents: read
+
+concurrency:
+  group: gemini-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   gemini-review:
@@ -23,7 +27,11 @@ jobs:
       - name: Extract PR Diff
         id: get_diff
         run: |
-          git diff origin/${{ github.base_ref }}...HEAD > pr_diff.txt
+          if [ "${{ github.event.action }}" = "synchronize" ]; then
+            git diff ${{ github.event.before }}...${{ github.event.after }} > pr_diff.txt
+          else
+            git diff origin/${{ github.base_ref }}...HEAD > pr_diff.txt
+          fi
           echo "DIFF_SIZE=$(wc -c < pr_diff.txt)" >> $GITHUB_ENV
 
       # 3. Python 환경 세팅 및 의존성 설치
@@ -39,56 +47,55 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests
 
-      # 4. 정밀 파싱 및 Gemini 리뷰 실행 스크립트 생성
-      - name: Run Strict Code Review
+      # 4. 스크립트 파일로 분리하여 저장
+      - name: Write Review Script
         if: env.DIFF_SIZE != '0'
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
         run: |
           cat << 'EOF' > gemini_strict_review.py
-          import os, requests, json, re
+          import os, requests, json, re, time
 
-          # 환경 변수를 가져온 뒤, 혹시 모를 앞뒤 공백이나 줄바꿈(\n, \r)을 완전히 제거합니다.
-          api_key = os.getenv('GEMINI_API_KEY')
-          if api_key:
-              api_key = api_key.strip().replace('\r', '').replace('\n', '')
-              
-          github_token = os.getenv('GITHUB_TOKEN')
-          pr_num = os.getenv('PR_NUMBER')
-          repo = os.getenv('REPO')
+          # ── 환경 변수 로드 ──────────────────────────────────────────────
+          api_key = os.getenv('GEMINI_API_KEY', '').strip().replace('\r', '').replace('\n', '')
+          github_token = os.getenv('GITHUB_TOKEN', '').strip()
+          pr_num       = os.getenv('PR_NUMBER', '').strip()
+          repo         = os.getenv('REPO', '').strip()
 
           if not api_key:
               print('에러: GEMINI_API_KEY가 비어있거나 올바르지 않습니다.')
               exit(1)
 
+          # ── diff 읽기 ───────────────────────────────────────────────────
           with open('pr_diff.txt', 'r', encoding='utf-8') as f:
               diff_text = f.read()
 
-          # --- Git Diff를 파싱하여 실제 변경된 라인만 추출 ---
-          lines = diff_text.splitlines()
-          current_file = None
-          new_line_num = 0
-          valid_changes = []
+          # ── Git Diff 파싱: 실제 변경된 라인만 추출 ──────────────────────
+          lines          = diff_text.splitlines()
+          current_file   = None
+          new_line_num   = 0          # ★ 파일 전환 시 초기화
+          valid_changes  = []
           valid_line_map = {}
 
+          MAX_LINES = 300             # ★ 대형 PR 토큰 상한
+
           for line in lines:
+              # --- a/ 는 무시, +++ b/ 에서 파일명 + 줄번호 초기화
+              if line.startswith('--- '):
+                  continue
               if line.startswith('+++ b/'):
                   current_file = line[6:]
+                  new_line_num = 0    # ★ 파일 전환 시 반드시 초기화
                   continue
-              elif line.startswith('@@ '):
+              if line.startswith('@@ '):
                   match = re.search(r'\+(\d+)', line)
                   if match:
                       new_line_num = int(match.group(1))
                   continue
-              
+
               if current_file:
                   if line.startswith('+') and not line.startswith('+++'):
                       valid_changes.append({
-                          'path': current_file,
-                          'line': new_line_num,
+                          'path':    current_file,
+                          'line':    new_line_num,
                           'content': line[1:]
                       })
                       valid_line_map[(current_file, new_line_num)] = True
@@ -100,14 +107,20 @@ jobs:
               print("이번 PR에서 새로 추가되거나 수정된 코드 라인이 없습니다.")
               exit(0)
 
+          # ★ 변경 라인 수 상한 적용
+          if len(valid_changes) > MAX_LINES:
+              print(f"변경 라인이 {len(valid_changes)}개로 많아 상위 {MAX_LINES}개만 검토합니다.")
+              valid_changes = valid_changes[:MAX_LINES]
+
           changes_json_str = json.dumps(valid_changes, ensure_ascii=False, indent=2)
-          
+
+          # ── Gemini 프롬프트 ─────────────────────────────────────────────
           prompt = f"""당신은 시니어 백엔드 소프트웨어 엔지니어입니다.
           아래 JSON 데이터는 이번 PR에서 '실제 새롭게 추가되거나 수정된 코드 라인들'의 목록입니다.
-          
+
           이 목록에 지정된 파일 경로('path')와 줄 번호('line')만 검토 대상으로 삼아주세요.
           백엔드 관점에서 정말로 버그 가능성이 높거나, 예외 처리 누락, 성능 저하(비효율적인 ORM 쿼리 등), 보안 문제가 있는 핵심 포인트만 골라 인라인 리뷰를 작성해 주세요.
-          
+
           [필수 준수 규칙]
           1. 오직 아래 목록에 명시된 'path'와 'line' 조합만 결과에 사용해야 합니다. 절대 목록에 없는 줄 번호를 임의로 추측하거나 창작하지 마세요.
           2. 단순 스타일 지적이나 사소한 의견은 제외하고, 수정이 꼭 필요한 부분만 포함하세요. 지적할 게 없다면 "comments" 배열을 비워두세요.
@@ -127,39 +140,57 @@ jobs:
           [리뷰 대상 변경 코드 목록]
           {changes_json_str}"""
 
-          # URL 주소를 빌드한 뒤 다시 한번 strip()으로 공백을 닦아냅니다.
-          url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
-          url = url.strip()
-          
+          # ── Gemini API 호출 (Exponential Backoff 재시도) ────────────────
+          url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key={api_key}'.strip()
           headers = {'Content-Type': 'application/json'}
           payload = {
               'contents': [{'parts': [{'text': prompt}]}],
               'generationConfig': {'responseMimeType': 'application/json'}
           }
 
-          print('Gemini 2.5에게 변경분 정밀 검수 요청 중...')
-          res = requests.post(url, headers=headers, json=payload)
-          if res.status_code != 200:
-              print('Gemini API 에러:', res.text)
+          def call_gemini_with_retry(url, headers, payload, max_retries=5):
+              for attempt in range(max_retries):
+                  res = requests.post(url, headers=headers, json=payload)
+                  if res.status_code == 200:
+                      return res
+                  if res.status_code == 503:
+                      wait = 2 ** attempt   # 1→2→4→8→16초
+                      print(f'Gemini 과부하 (503). {wait}초 후 재시도... ({attempt + 1}/{max_retries})')
+                      time.sleep(wait)
+                      continue
+                  # 503 외 에러는 즉시 종료
+                  print('Gemini API 에러:', res.text)
+                  exit(1)
+              print(f'Gemini API {max_retries}회 재시도 모두 실패. 나중에 다시 시도해주세요.')
               exit(1)
 
+          print('Gemini 3.1 Flash Lite에게 변경분 정밀 검수 요청 중...')
+          res = call_gemini_with_retry(url, headers, payload)
+
+          # ── 응답 파싱 ───────────────────────────────────────────────────
           try:
               response_text = res.json()['candidates'][0]['content']['parts'][0]['text']
-              review_data = json.loads(response_text)
+              review_data   = json.loads(response_text)
           except Exception as e:
               print('JSON 파싱 실패. Gemini 원본 응답:', res.text)
               exit(1)
 
+          # ── GitHub에 등록할 코멘트 필터링 ──────────────────────────────
           comments = review_data.get('comments', [])
           filtered_comments = []
           for c in comments:
               p = c.get('path')
               l = c.get('line')
               b = c.get('body')
-              if p and l and b and (p, int(l)) in valid_line_map:
+              # ★ 타입 안전 변환
+              try:
+                  line_num = int(l)
+              except (TypeError, ValueError):
+                  continue
+              if p and line_num and b and (p, line_num) in valid_line_map:
                   filtered_comments.append({
                       'path': p,
-                      'line': int(l),
+                      'line': line_num,
                       'body': b,
                       'side': 'RIGHT'
                   })
@@ -168,18 +199,26 @@ jobs:
               print('검수 완료: 크리티컬한 수정 필요 사항이 없습니다.')
               exit(0)
 
-          # GitHub PR에 라인별 리뷰 등록
-          gh_url = f'https://api.github.com/repos/{repo}/pulls/{pr_num}/reviews'
+          # ── GitHub PR HEAD SHA 조회 (commit_id 명시) ────────────────────
           gh_headers = {
               'Authorization': f'token {github_token}',
               'Accept': 'application/vnd.github.v3+json'
           }
+          pr_info  = requests.get(
+              f'https://api.github.com/repos/{repo}/pulls/{pr_num}',
+              headers=gh_headers
+          ).json()
+          head_sha = pr_info['head']['sha']   # ★ 커밋 고정
+
+          # ── GitHub PR 라인별 리뷰 등록 ─────────────────────────────────
+          gh_url     = f'https://api.github.com/repos/{repo}/pulls/{pr_num}/reviews'
           gh_payload = {
-              'body': '🤖 Gemini 2.5가 이번 PR의 실제 변경 라인만 타겟팅하여 정밀 검수를 완료했습니다.',
-              'event': 'COMMENT',
-              'comments': filtered_comments
+              'commit_id': head_sha,
+              'body':      '🤖 Gemini 3.1 Flash Lite가 이번 PR의 실제 변경 라인만 타겟팅하여 정밀 검수를 완료했습니다.',
+              'event':     'COMMENT',
+              'comments':  filtered_comments
           }
-          
+
           print(f'GitHub PR에 {len(filtered_comments)}개의 유효한 라인별 리뷰를 등록합니다...')
           gh_res = requests.post(gh_url, headers=gh_headers, json=gh_payload)
           if gh_res.status_code not in [200, 201]:
@@ -188,5 +227,19 @@ jobs:
 
           print('변경된 내용에만 정확하게 리뷰가 달렸습니다!')
           EOF
-          
-          python gemini_strict_review.py
+
+      # 5. 코드 리뷰 실행 (실패 시 shell 레벨에서 재시도)
+      - name: Run Strict Code Review
+        if: env.DIFF_SIZE != '0'
+        timeout-minutes: 15
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          for i in 1 2 3; do
+            python gemini_strict_review.py && break
+            echo "시도 $i 실패. 120초 대기 후 재시도..."
+            sleep 120
+          done
