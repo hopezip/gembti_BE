@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service
 from app.auth.models import LoginProvider, User, UserStatus, UserWithdrawalStatus
-from app.auth.schemas import AuthResponse, LoginRequest, WithdrawRequest
-from app.core.exceptions import BadRequestException, UnauthorizedException
+from app.auth.schemas import AuthResponse, LoginRequest, PasswordResetRequest, WithdrawRequest
+from app.core.exceptions import BadRequestException, ForbiddenException, UnauthorizedException
 from app.core.security import decode_token
 
 
@@ -117,6 +117,112 @@ async def test_login_hides_invalid_credential_reason(
             cast("AsyncSession", object()),
             Response(),
             LoginRequest(email="missing@example.com", password="Password!1"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_check_nickname_available_returns_false_for_duplicate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def get_user_by_nickname(db: AsyncSession, nickname: str) -> User | None:
+        return create_user()
+
+    monkeypatch.setattr(service, "get_user_by_nickname", get_user_by_nickname)
+
+    result = await service.check_nickname_available(
+        cast("AsyncSession", object()),
+        "tester",
+    )
+
+    assert result.available is False
+    assert result.message == "이미 사용 중인 닉네임입니다."
+
+
+@pytest.mark.asyncio
+async def test_check_nickname_available_returns_true(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def get_user_by_nickname(db: AsyncSession, nickname: str) -> User | None:
+        return None
+
+    monkeypatch.setattr(service, "get_user_by_nickname", get_user_by_nickname)
+
+    result = await service.check_nickname_available(
+        cast("AsyncSession", object()),
+        "tester",
+    )
+
+    assert result.available is True
+    assert result.message == "사용 가능한 닉네임입니다."
+
+
+@pytest.mark.asyncio
+async def test_reset_password_updates_hash_and_clears_refresh_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = create_user()
+    committed: list[bool] = []
+    deleted_all: list[int] = []
+
+    class FakeSession:
+        async def commit(self) -> None:
+            committed.append(True)
+
+    async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
+        return user
+
+    async def consume_verified_email(email, purpose) -> bool:
+        return True
+
+    async def delete_all_refresh_tokens_for_user(user_id: int) -> None:
+        deleted_all.append(user_id)
+
+    monkeypatch.setattr(service, "get_user_by_email", get_user_by_email)
+    monkeypatch.setattr(service, "consume_verified_email", consume_verified_email)
+    monkeypatch.setattr(service, "hash_password", lambda password: f"hashed:{password}")
+    monkeypatch.setattr(
+        service,
+        "delete_all_refresh_tokens_for_user",
+        delete_all_refresh_tokens_for_user,
+    )
+
+    await service.reset_password(
+        cast("AsyncSession", FakeSession()),
+        PasswordResetRequest(
+            email="TEST@example.com",
+            password="NewPassword!1",
+            password_confirm="NewPassword!1",
+        ),
+    )
+
+    assert user.password_hash == "hashed:NewPassword!1"
+    assert committed == [True]
+    assert deleted_all == [7]
+
+
+@pytest.mark.asyncio
+async def test_reset_password_requires_verified_email(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = create_user()
+
+    async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
+        return user
+
+    async def consume_verified_email(email, purpose) -> bool:
+        return False
+
+    monkeypatch.setattr(service, "get_user_by_email", get_user_by_email)
+    monkeypatch.setattr(service, "consume_verified_email", consume_verified_email)
+
+    with pytest.raises(ForbiddenException, match="이메일 인증이 필요합니다."):
+        await service.reset_password(
+            cast("AsyncSession", object()),
+            PasswordResetRequest(
+                email="test@example.com",
+                password="NewPassword!1",
+                password_confirm="NewPassword!1",
+            ),
         )
 
 

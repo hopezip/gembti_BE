@@ -46,6 +46,25 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=10, max_length=100)
+    password_confirm: str
+
+    @model_validator(mode="after")
+    def validate_password_reset(self) -> "PasswordResetRequest":
+        if self.password != self.password_confirm:
+            raise ValueError("비밀번호와 비밀번호 확인이 일치하지 않습니다.")
+
+        validate_password_policy(self.password)
+        return self
+
+
+class NicknameCheckResponse(BaseModel):
+    available: bool
+    message: str
+
+
 class UserFlowStatus(StrEnum):
     NEEDS_SURVEY = "NEEDS_SURVEY"
     READY = "READY"
