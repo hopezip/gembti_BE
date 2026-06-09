@@ -40,5 +40,7 @@ def user_stats_to_vector(stats: UserStats) -> list[float]:
 def _normalize(vector: list[float]) -> list[float]:
     norm = math.sqrt(sum(v * v for v in vector))
     if norm < 1e-9:
-        return [0.0] * len(vector)
+        # 매핑 정보가 없는 경우 균등 단위 벡터 반환 (모든 성향에 동등한 가중치)
+        size = len(vector)
+        return [1.0 / math.sqrt(size)] * size
     return [v / norm for v in vector]
