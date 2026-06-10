@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 
 from app.auth.models import LoginProvider, User, UserStatus
 from app.auth.repository import get_user_by_id, get_user_by_nickname
+from app.auth.service import issue_auth_tokens
 from app.core.config import settings
 from app.core.exceptions import BadRequestException, ConflictException, NotFoundException
 from app.steam.client import (
@@ -22,6 +23,7 @@ from app.steam.repository import (
 from app.steam.schemas import SteamLinkResponse, SteamStatusResponse
 
 if TYPE_CHECKING:
+    from fastapi import Response
     from sqlalchemy.ext.asyncio import AsyncSession
 
 STEAM_CLAIMED_ID_PATTERN = re.compile(r"^https://steamcommunity\.com/openid/id/(\d{17})$")
@@ -119,6 +121,7 @@ async def create_unique_steam_nickname(db: AsyncSession, steam_id_64: int) -> st
 
 async def complete_steam_login(
     db: AsyncSession,
+    response: Response,
     params: dict[str, str],
 ) -> tuple[User, bool]:
     steam_id_64 = await verify_and_extract_steam_id(params)
@@ -131,6 +134,7 @@ async def complete_steam_login(
         avatar_url=avatar_url,
     )
     await db.commit()
+    await issue_auth_tokens(response, user)
     return user, is_new_user
 
 
