@@ -12,8 +12,6 @@ if TYPE_CHECKING:
 
 from app.chat.infrastructure.embedding import (
     EmbeddingResponseError,
-)
-from app.chat.infrastructure.embedding import (
     validate_embedding_dimensions,
 )
 from app.chat.rag.model import (
