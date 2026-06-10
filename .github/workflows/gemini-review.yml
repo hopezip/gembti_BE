@@ -149,20 +149,26 @@ jobs:
           }
 
           def call_gemini_with_retry(url, headers, payload, max_retries=5):
-              for attempt in range(max_retries):
-                  res = requests.post(url, headers=headers, json=payload)
-                  if res.status_code == 200:
-                      return res
-                  if res.status_code == 503:
-                      wait = 2 ** attempt   # 1→2→4→8→16초
-                      print(f'Gemini 과부하 (503). {wait}초 후 재시도... ({attempt + 1}/{max_retries})')
-                      time.sleep(wait)
-                      continue
-                  # 503 외 에러는 즉시 종료
-                  print('Gemini API 에러:', res.text)
-                  exit(1)
-              print(f'Gemini API {max_retries}회 재시도 모두 실패. 나중에 다시 시도해주세요.')
-              exit(1)
+            for attempt in range(max_retries):
+                try:
+                    res = requests.post(url, headers=headers, json=payload, timeout=90)
+                except (requests.exceptions.ConnectionError,
+                        requests.exceptions.Timeout) as e:
+                    wait = 2 ** attempt
+                    print(f'네트워크 오류 ({attempt+1}/{max_retries}). {wait}초 후 재시도...: {e}')
+                    time.sleep(wait)
+                    continue
+                if res.status_code == 200:
+                    return res
+                if res.status_code in (429, 503):
+                    wait = 2 ** attempt
+                    print(f'Gemini 과부하 ({res.status_code}). {wait}초 후 재시도... ({attempt+1}/{max_retries})')
+                    time.sleep(wait)
+                    continue
+                print('Gemini API 에러:', res.status_code, res.text)
+                exit(1)
+            print(f'Gemini API {max_retries}회 재시도 모두 실패.')
+            exit(1)
 
           print('Gemini 3.1 Flash Lite에게 변경분 정밀 검수 요청 중...')
           res = call_gemini_with_retry(url, headers, payload)
@@ -176,21 +182,29 @@ jobs:
               exit(1)
 
           # ── GitHub에 등록할 코멘트 필터링 ──────────────────────────────
+          def find_nearest_valid_line(path, line_num, valid_line_map, tolerance=3):
+              for delta in range(-tolerance, tolerance + 1):
+                  if (path, line_num + delta) in valid_line_map:
+                      return line_num + delta
+              return None
+          
           comments = review_data.get('comments', [])
+          print(f'Gemini 반환 코멘트 수: {len(comments)}')
           filtered_comments = []
           for c in comments:
               p = c.get('path')
               l = c.get('line')
               b = c.get('body')
-              # ★ 타입 안전 변환
               try:
                   line_num = int(l)
               except (TypeError, ValueError):
                   continue
-              if p and line_num and b and (p, line_num) in valid_line_map:
+              matched_line = find_nearest_valid_line(p, line_num, valid_line_map)
+              print(f'  체크: {p}:{line_num} → 매칭된 줄={matched_line}')
+              if p and b and matched_line is not None:
                   filtered_comments.append({
                       'path': p,
-                      'line': line_num,
+                      'line': matched_line,
                       'body': b,
                       'side': 'RIGHT'
                   })
