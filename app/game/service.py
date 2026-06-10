@@ -85,6 +85,7 @@ def _parse_game_data(
         _CATEGORY_ID_EN.get(str(c.get("id", "")), c["description"]) for c in categories_raw
     ]
 
+    price_krw: int | None
     if data.get("is_free"):
         price_krw = 0
     else:
@@ -179,6 +180,7 @@ async def fetch_and_save_games(
             failed += 1
             continue
 
+        assert isinstance(result, tuple)
         app_id, data, reviews, players = result
         if data is None:
             failed += 1
