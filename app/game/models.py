@@ -66,6 +66,7 @@ class Game(Base):
     )
     is_free: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_korean_supported: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    discount_percent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     current_players: Mapped[int | None] = mapped_column(Integer, nullable=True)
     current_players_updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
