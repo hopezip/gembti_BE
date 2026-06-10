@@ -11,6 +11,7 @@ def set_refresh_cookie(response: Response, refresh_token: str) -> None:
         httponly=True,
         secure=secure,
         samesite="none" if secure else "lax",
+        domain=".gembti.cloud",
         max_age=settings.REFRESH_TOKEN_TTL_SECONDS,
         path=settings.REFRESH_COOKIE_PATH,
     )
