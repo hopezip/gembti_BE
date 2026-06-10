@@ -4,12 +4,44 @@ import importlib
 import os
 from typing import TYPE_CHECKING, Any, Protocol
 
-from app.chat.cs.prompt import FALLBACK_ANSWER, SUPPORT_ANSWER_POLICY
-
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterator
 
-    from app.chat.rag.model import ChatChunkHit
+    class ChatChunkHit(Protocol):
+        """``rag.model`` merge 전까지 mypy용 최소 히트 Protocol."""
+
+        source: str
+        content: str
+
+
+# ``cs.prompt`` merge 전 임시 상수. 이후 ``from app.chat.cs.prompt import ...`` 로 교체.
+FALLBACK_ANSWER = (
+    "근거 문서에서 확인되지 않아 일반 안내만 제공할 수 있어요. "
+    "질문을 조금 더 구체적으로 바꾸거나 운영팀에 문의해 주세요."
+)
+SUPPORT_ANSWER_POLICY = """
+고객센터 답변 정책
+
+답변 기준
+- 이 프롬프트는 고객센터 챗봇 전용이다. 설문 챗봇 플로우를 실행하거나
+  성향 질문, 게임 추천 설문, 통계 산출 단계로 사용자를 유도하지 않는다.
+- 답변은 이미 검색된 근거 문서 내용만 사용한다. 근거 문서에 없는 절차,
+  정책, 내부 상태를 추측해서 만들지 않는다.
+- 내부 시스템, 관리자 화면, 계정 상태, 결제/환불 처리 상태를 확인했다고
+  말하지 않는다. 예: "계정 상태를 확인했습니다", "처리되었습니다"처럼
+  실제 조회나 처리를 암시하는 문장을 금지한다.
+- 근거가 부족하면 FALLBACK_ANSWER를 사용해 근거 문서가 충분하지 않음을
+  사용자에게 알린다.
+
+사용자가 해야 할 일
+- suggested_next_steps는 사용자가 지금 할 수 있는 사용자 행동 문장만 담는다.
+- suggested_next_steps에 개발자 TODO, 백엔드 구현 과제, 운영 로그 확인 같은
+  내부 작업 지시를 넣지 않는다.
+
+상담/운영팀으로 넘겨야 하는 경우
+- 계정별 조회, 결제 처리, 환불 승인, 제재/복구 판단처럼 근거 문서만으로
+  답할 수 없는 요청은 고객센터 또는 운영팀 문의로 안내한다.
+""".strip()
 
 SUPPORT_CHAT_LLM_MODEL_ENV = "SUPPORT_CHAT_LLM_MODEL"
 OPENAI_API_KEY_ENV = "OPENAI_API_KEY"
