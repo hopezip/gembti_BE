@@ -3,9 +3,12 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, date, datetime
 import logging
+from typing import TYPE_CHECKING
 
 import httpx
-from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.recommendation.vectorizer import game_to_vector
 from app.game.client import fetch_app_details, fetch_app_reviews, fetch_current_players

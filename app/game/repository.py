@@ -1,9 +1,13 @@
 # games, game_tags 저장/조회
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.game.models import Game
 

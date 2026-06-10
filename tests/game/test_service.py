@@ -183,7 +183,7 @@ async def test_fetch_and_save_games_success():
     players = 5000
 
     with (
-        patch("app.game.service.fetch_app_details", return_value=data) as mock_details,
+        patch("app.game.service.fetch_app_details", return_value=data),
         patch("app.game.service.fetch_app_reviews", return_value=reviews),
         patch("app.game.service.fetch_current_players", return_value=players),
         patch("app.game.service.upsert_game", new_callable=AsyncMock) as mock_upsert,
