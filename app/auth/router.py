@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body, Cookie, Depends, Response, status
+from fastapi import APIRouter, Body, Cookie, Depends, Query, Response, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +11,8 @@ from app.auth.schemas import (
     EmailCodeVerifyRequest,
     LoginRequest,
     MessageResponse,
+    NicknameCheckResponse,
+    PasswordResetRequest,
     SignupRequest,
     UserFlowStatus,
     UserResponse,
@@ -18,9 +20,11 @@ from app.auth.schemas import (
     WithdrawResponse,
 )
 from app.auth.service import (
+    check_nickname_available,
     login,
     logout_tokens,
     refresh_access_token,
+    reset_password,
     send_email_code,
     signup,
     verify_email,
@@ -49,6 +53,14 @@ async def verify_email_api(request: EmailCodeVerifyRequest) -> MessageResponse:
     return MessageResponse(message="이메일 인증이 완료되었습니다.")
 
 
+@router.get("/nickname/check", response_model=NicknameCheckResponse)
+async def check_nickname_api(
+    nickname: str = Query(min_length=2, max_length=8, pattern=r"^[가-힣A-Za-z0-9]+$"),
+    db: AsyncSession = Depends(get_db),
+) -> NicknameCheckResponse:
+    return await check_nickname_available(db, nickname)
+
+
 @router.post("/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 async def signup_api(
     request: SignupRequest,
@@ -65,6 +77,15 @@ async def login_api(
     db: AsyncSession = Depends(get_db),
 ) -> AuthResponse:
     return await login(db, response, request)
+
+
+@router.post("/password/reset", response_model=MessageResponse)
+async def reset_password_api(
+    request: PasswordResetRequest,
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    await reset_password(db, request)
+    return MessageResponse(message="비밀번호가 재설정되었습니다.")
 
 
 @router.post("/refresh", response_model=AccessTokenResponse)

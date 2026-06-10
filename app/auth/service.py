@@ -39,6 +39,8 @@ from app.auth.schemas import (
     AccessTokenResponse,
     AuthResponse,
     LoginRequest,
+    NicknameCheckResponse,
+    PasswordResetRequest,
     SignupRequest,
     WithdrawRequest,
     WithdrawResponse,
@@ -149,6 +151,42 @@ async def login(
         raise ForbiddenException("사용할 수 없는 계정입니다.")
 
     return await issue_auth_tokens(response, user)
+
+
+async def check_nickname_available(
+    db: AsyncSession,
+    nickname: str,
+) -> NicknameCheckResponse:
+    if await get_user_by_nickname(db, nickname):
+        return NicknameCheckResponse(
+            available=False,
+            message="이미 사용 중인 닉네임입니다.",
+        )
+
+    return NicknameCheckResponse(
+        available=True,
+        message="사용 가능한 닉네임입니다.",
+    )
+
+
+async def reset_password(
+    db: AsyncSession,
+    request: PasswordResetRequest,
+) -> None:
+    email = request.email.lower()
+    user = await get_user_by_email(db, email)
+    if user is None:
+        raise BadRequestException("가입되지 않은 이메일입니다.")
+    if user.login_provider != LoginProvider.EMAIL or user.password_hash is None:
+        raise BadRequestException("비밀번호 재설정을 사용할 수 없는 계정입니다.")
+    if user.status != UserStatus.ACTIVE:
+        raise ForbiddenException("사용할 수 없는 계정입니다.")
+    if not await consume_verified_email(email, EmailVerificationPurpose.PASSWORD_RESET):
+        raise ForbiddenException("이메일 인증이 필요합니다.")
+
+    user.password_hash = hash_password(request.password)
+    await db.commit()
+    await delete_all_refresh_tokens_for_user(user.id)
 
 
 async def refresh_access_token(
