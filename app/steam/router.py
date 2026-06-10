@@ -47,7 +47,6 @@ async def steam_auth_callback_api(
         result="success",
         is_new_user=is_new_user,
         steam_linked=True,
-        user_id=user.id,
     )
     return response
 
