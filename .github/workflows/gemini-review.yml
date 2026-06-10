@@ -200,12 +200,12 @@ jobs:
               except (TypeError, ValueError):
                   continue
               matched_line = find_nearest_valid_line(p, line_num, valid_line_map)
-              print(f'  체크: {p}:{line_num} → 매칭된 줄={matched_line}')
-              if p and b and matched_line is not None:
+              print(f'  체크: {p}:{line_num} → 매칭된 줄={matched_line}, body={repr(b)[:50]}')
+              if matched_line is not None:
                   filtered_comments.append({
                       'path': p,
                       'line': matched_line,
-                      'body': b,
+                      'body': b if b else '(리뷰 내용 없음)',
                       'side': 'RIGHT'
                   })
 
