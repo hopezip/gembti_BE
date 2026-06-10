@@ -31,7 +31,7 @@ async def steam_auth_callback_api(
         status_code=status.HTTP_302_FOUND,
     )
     try:
-        user, is_new_user = await complete_steam_login(
+        user, is_new_user, access_token = await complete_steam_login(
             db=db,
             response=response,
             params=dict(request.query_params),
@@ -47,6 +47,7 @@ async def steam_auth_callback_api(
         result="success",
         is_new_user=is_new_user,
         steam_linked=True,
+        access_token=access_token,
     )
     return response
 
