@@ -177,6 +177,7 @@ jobs:
 
           # ── GitHub에 등록할 코멘트 필터링 ──────────────────────────────
           comments = review_data.get('comments', [])
+          print(f'Gemini 반환 코멘트 수: {len(comments)}')
           filtered_comments = []
           for c in comments:
               p = c.get('path')
