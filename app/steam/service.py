@@ -134,7 +134,7 @@ async def complete_steam_login(
         avatar_url=avatar_url,
     )
     await db.commit()
-    auth = await issue_auth_tokens(response, user)
+    await issue_auth_tokens(response, user)
     return user, is_new_user, access_token
 
 
