@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.service import issue_auth_tokens
 from app.core.dependencies import get_current_user_id, get_db
 from app.core.exceptions import BadRequestException
 from app.steam.schemas import SteamLinkRequest, SteamLinkResponse, SteamStatusResponse
@@ -33,7 +34,6 @@ async def steam_auth_callback_api(
     try:
         user, is_new_user = await complete_steam_login(
             db=db,
-            response=response,
             params=dict(request.query_params),
         )
     except BadRequestException:
@@ -49,6 +49,7 @@ async def steam_auth_callback_api(
         steam_linked=True,
         user_id=user.id,
     )
+    await issue_auth_tokens(response, user)
     return response
 
 
