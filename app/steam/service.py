@@ -123,19 +123,19 @@ async def complete_steam_login(
     db: AsyncSession,
     response: Response,
     params: dict[str, str],
-) -> tuple[User, bool]:
+) -> tuple[User, bool, str]:
     steam_id_64 = await verify_and_extract_steam_id(params)
     profile = await get_player_summary(steam_id_64)
     avatar_url = None if profile is None else profile.get("avatarfull")
 
-    user, is_new_user, access_token = await get_or_create_steam_user(
+    user, is_new_user = await get_or_create_steam_user(
         db=db,
         steam_id_64=steam_id_64,
         avatar_url=avatar_url,
     )
     await db.commit()
-    await issue_auth_tokens(response, user)
-    return user, is_new_user, access_token
+    auth = await issue_auth_tokens(response, user)
+    return user, is_new_user, auth.access_token
 
 
 async def link_steam_account(
