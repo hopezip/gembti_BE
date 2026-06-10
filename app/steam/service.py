@@ -123,7 +123,7 @@ async def complete_steam_login(
     db: AsyncSession,
     response: Response,
     params: dict[str, str],
-) -> tuple[User, bool, str]:
+) -> tuple[User, bool]:
     steam_id_64 = await verify_and_extract_steam_id(params)
     profile = await get_player_summary(steam_id_64)
     avatar_url = None if profile is None else profile.get("avatarfull")
@@ -134,8 +134,8 @@ async def complete_steam_login(
         avatar_url=avatar_url,
     )
     await db.commit()
-    auth = await issue_auth_tokens(response, user)
-    return user, is_new_user, auth.access_token
+    await issue_auth_tokens(response, user)
+    return user, is_new_user
 
 
 async def link_steam_account(
