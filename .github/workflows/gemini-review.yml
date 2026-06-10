@@ -182,6 +182,12 @@ jobs:
               exit(1)
 
           # ── GitHub에 등록할 코멘트 필터링 ──────────────────────────────
+          def find_nearest_valid_line(path, line_num, valid_line_map, tolerance=3):
+              for delta in range(-tolerance, tolerance + 1):
+                  if (path, line_num + delta) in valid_line_map:
+                      return line_num + delta
+              return None
+          
           comments = review_data.get('comments', [])
           print(f'Gemini 반환 코멘트 수: {len(comments)}')
           filtered_comments = []
@@ -189,15 +195,16 @@ jobs:
               p = c.get('path')
               l = c.get('line')
               b = c.get('body')
-              # ★ 타입 안전 변환
               try:
                   line_num = int(l)
               except (TypeError, ValueError):
                   continue
-              if p and line_num and b and (p, line_num) in valid_line_map:
+              matched_line = find_nearest_valid_line(p, line_num, valid_line_map)
+              print(f'  체크: {p}:{line_num} → 매칭된 줄={matched_line}')
+              if p and b and matched_line is not None:
                   filtered_comments.append({
                       'path': p,
-                      'line': line_num,
+                      'line': matched_line,
                       'body': b,
                       'side': 'RIGHT'
                   })
