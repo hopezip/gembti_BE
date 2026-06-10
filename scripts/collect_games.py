@@ -59,7 +59,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("collect_games")
 
-CHECKPOINT_FILE = _ROOT / "scripts" / ".collect_checkpoint.json"
+CHECKPOINT_FILE = Path("/tmp/.collect_checkpoint.json")
 
 # ── 인터럽트 처리 ──────────────────────────────────────────────────────────────
 
