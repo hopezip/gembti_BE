@@ -10,7 +10,8 @@ def set_refresh_cookie(response: Response, refresh_token: str) -> None:
         value=refresh_token,
         httponly=True,
         secure=secure,
-        samesite="none" if secure else "lax",
+        samesite="lax" if secure else "none",
+        domain=".gembti.cloud",
         max_age=settings.REFRESH_TOKEN_TTL_SECONDS,
         path=settings.REFRESH_COOKIE_PATH,
     )
@@ -22,5 +23,6 @@ def delete_refresh_cookie(response: Response) -> None:
         path=settings.REFRESH_COOKIE_PATH,
         secure=settings.APP_ENV != "development",
         httponly=True,
-        samesite="none" if settings.APP_ENV != "development" else "lax",
+        samesite="lax" if settings.APP_ENV != "development" else "none",
+        domain=".gembti.cloud",
     )
