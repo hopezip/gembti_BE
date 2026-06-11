@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, Query
 
@@ -26,8 +26,11 @@ from app.game.service import (
 
 router = APIRouter(prefix="/games", tags=["게임"])
 
+_500: dict[int | str, dict[str, Any]] = {500: {"description": "Internal Server Error"}}
+_404_500: dict[int | str, dict[str, Any]] = {404: {"description": "Not Found"}, **_500}
 
-@router.get("/search", response_model=SearchResponse)
+
+@router.get("/search", response_model=SearchResponse, responses=_500)
 async def search_games_api(
     q: str = Query(default="", description="검색어 (제목·장르)"),
     page: int = Query(default=1, ge=1, description="페이지 번호"),
@@ -46,7 +49,7 @@ async def search_games_api(
     )
 
 
-@router.get("/trending", response_model=TrendingGamesResponse)
+@router.get("/trending", response_model=TrendingGamesResponse, responses=_500)
 async def trending_games_api(
     limit: int = Query(default=10, ge=1, description="반환 개수"),
     db: AsyncSession = Depends(get_db),
@@ -54,7 +57,7 @@ async def trending_games_api(
     return await get_trending_games_service(db, limit=limit)
 
 
-@router.get("/new-releases", response_model=NewReleasesResponse)
+@router.get("/new-releases", response_model=NewReleasesResponse, responses=_500)
 async def new_releases_api(
     limit: int = Query(default=10, ge=1, description="반환 개수"),
     db: AsyncSession = Depends(get_db),
@@ -62,7 +65,7 @@ async def new_releases_api(
     return await get_new_releases_service(db, limit=limit)
 
 
-@router.get("/{game_id}", response_model=GameDetailResponse)
+@router.get("/{game_id}", response_model=GameDetailResponse, responses=_404_500)
 async def game_detail_api(
     game_id: int,
     db: AsyncSession = Depends(get_db),
