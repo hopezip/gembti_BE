@@ -8,7 +8,6 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
-from app.core.exceptions import NotFoundException
 from app.game.schemas import (
     CategoryOption,
     GameDetailResponse,
@@ -49,7 +48,7 @@ async def search_games_api(
 
 @router.get("/trending", response_model=TrendingGamesResponse)
 async def trending_games_api(
-    limit: int = Query(default=10, ge=1, le=50, description="반환 개수"),
+    limit: int = Query(default=10, ge=1, description="반환 개수"),
     db: AsyncSession = Depends(get_db),
 ) -> TrendingGamesResponse:
     return await get_trending_games_service(db, limit=limit)
@@ -57,7 +56,7 @@ async def trending_games_api(
 
 @router.get("/new-releases", response_model=NewReleasesResponse)
 async def new_releases_api(
-    limit: int = Query(default=10, ge=1, le=50, description="반환 개수"),
+    limit: int = Query(default=10, ge=1, description="반환 개수"),
     db: AsyncSession = Depends(get_db),
 ) -> NewReleasesResponse:
     return await get_new_releases_service(db, limit=limit)
@@ -68,7 +67,4 @@ async def game_detail_api(
     game_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> GameDetailResponse:
-    detail = await get_game_detail_service(db, game_id)
-    if detail is None:
-        raise NotFoundException("게임을 찾을 수 없습니다.")
-    return detail
+    return await get_game_detail_service(db, game_id)

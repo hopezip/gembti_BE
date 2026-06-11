@@ -12,6 +12,7 @@ import httpx
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import NotFoundException
 from app.core.recommendation.vectorizer import game_to_vector
 from app.game.client import fetch_app_details, fetch_app_reviews, fetch_current_players
 from app.game.repository import upsert_game
@@ -512,7 +513,7 @@ async def get_new_releases_service(
 async def get_game_detail_service(
     session: AsyncSession,
     game_id: int,
-) -> GameDetailResponse | None:  # type: ignore[name-defined]  # noqa: F821
+) -> GameDetailResponse:  # type: ignore[name-defined]  # noqa: F821
     from app.game.repository import get_developer_games, get_game_by_id
     from app.game.schemas import (
         GameDetailDataResponse,
@@ -525,7 +526,7 @@ async def get_game_detail_service(
 
     game = await get_game_by_id(session, game_id)
     if game is None:
-        return None
+        raise NotFoundException("게임을 찾을 수 없습니다.")
 
     detail_json = game.steam_detail_json or {}
 

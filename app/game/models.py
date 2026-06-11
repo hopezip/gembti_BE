@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import date, datetime  # noqa: TC003
 from enum import StrEnum
-from typing import TYPE_CHECKING
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
@@ -11,22 +10,15 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
-    Enum,
-    ForeignKey,
     Integer,
     Numeric,
     String,
     Text,
-    UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
-from app.core.enums import enum_values
-
-if TYPE_CHECKING:
-    from app.auth.models import User
 
 
 class SoftDeleteStatus(StrEnum):
@@ -73,42 +65,3 @@ class Game(Base):
         nullable=True,
     )
     steam_detail_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-
-
-class GameReview(Base):
-    __tablename__ = "game_reviews"
-    __table_args__ = (UniqueConstraint("user_id", "game_id", name="uq_game_reviews_user_game"),)
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    game_id: Mapped[int] = mapped_column(
-        ForeignKey("games.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    rating: Mapped[int] = mapped_column(Integer, nullable=False)
-    content: Mapped[str | None] = mapped_column(Text, nullable=True)
-    is_recommended: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    status: Mapped[SoftDeleteStatus] = mapped_column(
-        Enum(SoftDeleteStatus, name="game_review_status", values_callable=enum_values),
-        nullable=False,
-        default=SoftDeleteStatus.ACTIVE,
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
-
-    user: Mapped[User] = relationship("User")
-    game: Mapped[Game] = relationship("Game")

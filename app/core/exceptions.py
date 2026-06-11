@@ -10,9 +10,9 @@ class AppException(Exception):
         super().__init__(detail)
 
 
-class NotFoundException(AppException):
-    def __init__(self, detail: str = "리소스를 찾을 수 없습니다.") -> None:
-        super().__init__(status.HTTP_404_NOT_FOUND, detail)
+class BadRequestException(AppException):
+    def __init__(self, detail: str = "잘못된 요청입니다.") -> None:
+        super().__init__(status.HTTP_400_BAD_REQUEST, detail)
 
 
 class UnauthorizedException(AppException):
@@ -25,9 +25,9 @@ class ForbiddenException(AppException):
         super().__init__(status.HTTP_403_FORBIDDEN, detail)
 
 
-class BadRequestException(AppException):
-    def __init__(self, detail: str = "잘못된 요청입니다.") -> None:
-        super().__init__(status.HTTP_400_BAD_REQUEST, detail)
+class NotFoundException(AppException):
+    def __init__(self, detail: str = "리소스를 찾을 수 없습니다.") -> None:
+        super().__init__(status.HTTP_404_NOT_FOUND, detail)
 
 
 class ConflictException(AppException):
