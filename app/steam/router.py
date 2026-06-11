@@ -1,33 +1,32 @@
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user_id, get_db
 from app.core.exceptions import BadRequestException
 from app.steam.schemas import (
-    SteamCompleteSignupRequest,
-    SteamCompleteSignupResponse,
     SteamLinkRequest,
     SteamLinkResponse,
-    SteamRecentlyPlayedResponse,
-    SteamStatusResponse,
-    SteamSyncResponse,
 )
 from app.steam.service import (
     build_steam_login_url,
     complete_steam_login,
-    complete_steam_signup,
     get_frontend_steam_callback_url,
-    get_recently_played,
-    get_steam_status,
     link_steam_account,
-    sync_steam_library,
 )
 
 router = APIRouter(tags=["Steam"])
 
+_err = lambda msg: {"content": {"application/json": {"example": {"error": msg}}}}  # noqa: E731
 
-@router.get("/auth/steam", status_code=status.HTTP_302_FOUND)
+
+@router.get(
+    "/auth/steam",
+    status_code=status.HTTP_302_FOUND,
+    responses={
+        500: _err("스팀 연동 서버 오류"),
+    },
+)
 async def steam_auth_login_api() -> RedirectResponse:
     return RedirectResponse(build_steam_login_url(), status_code=status.HTTP_302_FOUND)
 
@@ -70,19 +69,14 @@ async def steam_auth_callback_api(
 
 
 @router.post(
-    "/auth/steam/complete-signup",
-    response_model=SteamCompleteSignupResponse,
-    status_code=status.HTTP_201_CREATED,
+    "/steam/link",
+    response_model=SteamLinkResponse,
+    responses={
+        400: _err("이미 연동된 Steam 계정"),
+        401: _err("인증 실패"),
+        403: _err("접근 권한이 없습니다."),
+    },
 )
-async def steam_complete_signup_api(
-    request: SteamCompleteSignupRequest,
-    response: Response,
-    db: AsyncSession = Depends(get_db),
-) -> SteamCompleteSignupResponse:
-    return await complete_steam_signup(db=db, response=response, request=request)
-
-
-@router.post("/steam/link", response_model=SteamLinkResponse)
 async def steam_link_api(
     request: SteamLinkRequest,
     user_id: int = Depends(get_current_user_id),
@@ -91,29 +85,3 @@ async def steam_link_api(
     response = await link_steam_account(db, user_id, request.steam_id)
     await db.commit()
     return response
-
-
-@router.get("/steam/status", response_model=SteamStatusResponse)
-async def steam_status_api(
-    user_id: int = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
-) -> SteamStatusResponse:
-    return await get_steam_status(db, user_id)
-
-
-@router.post("/steam/sync", response_model=SteamSyncResponse)
-async def steam_sync_api(
-    user_id: int = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
-) -> SteamSyncResponse:
-    response = await sync_steam_library(db, user_id)
-    await db.commit()
-    return response
-
-
-@router.get("/steam/recently-played", response_model=SteamRecentlyPlayedResponse)
-async def steam_recently_played_api(
-    user_id: int = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
-) -> SteamRecentlyPlayedResponse:
-    return await get_recently_played(db, user_id)
