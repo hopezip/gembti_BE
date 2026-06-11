@@ -79,17 +79,35 @@ async def search_games(
         conds.append(
             or_(
                 Game.title.ilike(f"%{q}%"),
-                cast(Game.genres, Text).ilike(f"%{q}%"),
+                text(
+                    "EXISTS (SELECT 1 FROM json_array_elements_text(games.genres) _g"
+                    " WHERE _g ILIKE :q_genre)"
+                ).bindparams(q_genre=f"%{q}%"),
             )
         )
 
     # 장르 필터: 선택한 장르 각각을 AND로 적용, 동일 의미 DB 값은 OR
-    for db_vals in filter_genres or []:
-        conds.append(or_(*(cast(Game.genres, Text).ilike(f'%"{v}"%') for v in db_vals)))
+    # JSON이 유니코드 이스케이프로 저장되므로 json_array_elements_text로 실제 텍스트 비교
+    for i, db_vals in enumerate(filter_genres or []):
+        or_parts = [
+            text(
+                "EXISTS (SELECT 1 FROM json_array_elements_text(games.genres) _g"
+                f" WHERE _g = :gv_{i}_{j})"
+            ).bindparams(**{f"gv_{i}_{j}": v})
+            for j, v in enumerate(db_vals)
+        ]
+        conds.append(or_(*or_parts))
 
     # 카테고리(상위) 필터: 선택한 카테고리 각각을 AND로 적용, 동일 의미 DB 값은 OR
-    for db_vals in filter_categories or []:
-        conds.append(or_(*(cast(Game.category, Text).ilike(f'%"{v}"%') for v in db_vals)))
+    for i, db_vals in enumerate(filter_categories or []):
+        or_parts = [
+            text(
+                "EXISTS (SELECT 1 FROM json_array_elements_text(games.category) _c"
+                f" WHERE _c = :cv_{i}_{j})"
+            ).bindparams(**{f"cv_{i}_{j}": v})
+            for j, v in enumerate(db_vals)
+        ]
+        conds.append(or_(*or_parts))
 
     total_result = await session.execute(select(func.count()).select_from(Game).where(*conds))
     total = total_result.scalar_one()
