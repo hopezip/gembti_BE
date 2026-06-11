@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, date, datetime
+from html.parser import HTMLParser
 import logging
 import re
-from html.parser import HTMLParser
 from typing import TYPE_CHECKING
 
 import httpx
