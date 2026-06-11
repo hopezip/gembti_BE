@@ -10,6 +10,7 @@ def valid_signup_data() -> dict[str, object]:
         "password": "Password!1",
         "password_confirm": "Password!1",
         "nickname": "테스터1",
+        "age_confirmed": True,
         "terms_agreed": True,
         "privacy_agreed": True,
     }
@@ -26,7 +27,7 @@ def test_signup_schema_accepts_valid_request() -> None:
         ("password", "onlyletters"),
         ("password_confirm", "different!1"),
         ("nickname", "bad!name"),
-        ("terms_agreed", False),
+        ("age_confirmed", False),
     ],
 )
 def test_signup_schema_rejects_invalid_request(field: str, value: object) -> None:

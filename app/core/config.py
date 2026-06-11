@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     BACKEND_BASE_URL: str = "http://localhost:8000"
     FRONTEND_BASE_URL: str = "http://localhost:3000"
     STEAM_CALLBACK_PATH: str = "/steam/callback"
+    STEAM_SIGNUP_TOKEN_TTL_SECONDS: int = 600
 
     # ── 이메일 (fastapi-mail) ─────────────────────────────
     MAIL_USERNAME: str = ""

@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user_id, get_db
 from app.core.exceptions import BadRequestException
 from app.steam.schemas import (
+    SteamCompleteSignupRequest,
+    SteamCompleteSignupResponse,
     SteamLinkRequest,
     SteamLinkResponse,
     SteamRecentlyPlayedResponse,
@@ -14,6 +16,7 @@ from app.steam.schemas import (
 from app.steam.service import (
     build_steam_login_url,
     complete_steam_login,
+    complete_steam_signup,
     get_frontend_steam_callback_url,
     get_recently_played,
     get_steam_status,
@@ -39,7 +42,7 @@ async def steam_auth_callback_api(
         status_code=status.HTTP_302_FOUND,
     )
     try:
-        user, is_new_user = await complete_steam_login(
+        user, is_new_user, signup_token = await complete_steam_login(
             db=db,
             response=response,
             params=dict(request.query_params),
@@ -51,12 +54,32 @@ async def steam_auth_callback_api(
         )
         return response
 
-    response.headers["location"] = get_frontend_steam_callback_url(
-        result="success",
-        is_new_user=is_new_user,
-        steam_linked=True,
-    )
+    if user is None:
+        response.headers["location"] = get_frontend_steam_callback_url(
+            result="signup_required",
+            is_new_user=is_new_user,
+            signup_token=signup_token,
+        )
+    else:
+        response.headers["location"] = get_frontend_steam_callback_url(
+            result="success",
+            is_new_user=is_new_user,
+            steam_linked=True,
+        )
     return response
+
+
+@router.post(
+    "/auth/steam/complete-signup",
+    response_model=SteamCompleteSignupResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def steam_complete_signup_api(
+    request: SteamCompleteSignupRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> SteamCompleteSignupResponse:
+    return await complete_steam_signup(db=db, response=response, request=request)
 
 
 @router.post("/steam/link", response_model=SteamLinkResponse)

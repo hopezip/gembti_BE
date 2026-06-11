@@ -88,8 +88,7 @@ async def reset_password_api(
     return MessageResponse(message="비밀번호가 재설정되었습니다.")
 
 
-@router.post("/refresh", response_model=AccessTokenResponse)
-async def refresh_api(
+async def _refresh_api(
     response: Response,
     refresh_token: str | None = Cookie(default=None, alias=settings.REFRESH_COOKIE_NAME),
     db: AsyncSession = Depends(get_db),
@@ -99,13 +98,31 @@ async def refresh_api(
     return await refresh_access_token(db, response, refresh_token)
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/token/refresh", response_model=AccessTokenResponse)
+async def refresh_token_api(
+    response: Response,
+    refresh_token: str | None = Cookie(default=None, alias=settings.REFRESH_COOKIE_NAME),
+    db: AsyncSession = Depends(get_db),
+) -> AccessTokenResponse:
+    return await _refresh_api(response=response, refresh_token=refresh_token, db=db)
+
+
+@router.post("/refresh", response_model=AccessTokenResponse)
+async def refresh_api(
+    response: Response,
+    refresh_token: str | None = Cookie(default=None, alias=settings.REFRESH_COOKIE_NAME),
+    db: AsyncSession = Depends(get_db),
+) -> AccessTokenResponse:
+    return await _refresh_api(response=response, refresh_token=refresh_token, db=db)
+
+
+@router.post("/logout", response_model=MessageResponse)
 async def logout_api(
     response: Response,
     user_id: int = Depends(get_current_user_id),
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     refresh_token: str | None = Cookie(default=None, alias=settings.REFRESH_COOKIE_NAME),
-) -> None:
+) -> MessageResponse:
     if credentials is None:
         raise UnauthorizedException()
 
@@ -114,6 +131,7 @@ async def logout_api(
     else:
         await blacklist_access_token(credentials.credentials)
         delete_refresh_cookie(response)
+    return MessageResponse(message="로그아웃 되었습니다.")
 
 
 @router.get("/me", response_model=UserResponse)

@@ -29,7 +29,7 @@ async def test_not_found():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         r = await ac.get("/trigger")
     assert r.status_code == 404
-    assert r.json()["detail"] == "게임 없음"
+    assert r.json() == {"error": "게임 없음"}
 
 
 @pytest.mark.asyncio
@@ -54,7 +54,7 @@ async def test_bad_request():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         r = await ac.get("/trigger")
     assert r.status_code == 400
-    assert r.json()["detail"] == "잘못된 형식"
+    assert r.json() == {"error": "잘못된 형식"}
 
 
 @pytest.mark.asyncio

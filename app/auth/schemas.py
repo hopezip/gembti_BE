@@ -2,7 +2,7 @@ from datetime import date, datetime
 from enum import StrEnum
 import re
 
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app.auth.models import EmailVerificationPurpose, Gender, LoginProvider, UserStatus
 from app.auth.password_policy import validate_password_policy
@@ -24,8 +24,16 @@ class SignupRequest(BaseModel):
     nickname: str = Field(min_length=2, max_length=8)
     gender: Gender | None = None
     birth_date: date | None = None
-    terms_agreed: bool
-    privacy_agreed: bool
+    age_confirmed: bool
+    terms_agreed: bool | None = None
+    privacy_agreed: bool | None = None
+
+    @field_validator("gender", mode="before")
+    @classmethod
+    def normalize_gender(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.lower()
+        return value
 
     @model_validator(mode="after")
     def validate_signup(self) -> "SignupRequest":
@@ -36,8 +44,8 @@ class SignupRequest(BaseModel):
 
         if not re.fullmatch(r"[가-힣A-Za-z0-9]+", self.nickname):
             raise ValueError("닉네임에는 특수문자를 사용할 수 없습니다.")
-        if not self.terms_agreed or not self.privacy_agreed:
-            raise ValueError("필수 약관에 동의해야 합니다.")
+        if not self.age_confirmed:
+            raise ValueError("만 15세 이상만 가입할 수 있습니다.")
         return self
 
 
@@ -103,10 +111,26 @@ class UserResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AuthUserResponse(BaseModel):
+    id: int
+    email: str
+    nickname: str
+    bio: str | None
+    login_provider: LoginProvider
+    status: UserStatus
+    steam_linked: bool
+    steam_id_64: str | None
+    steam_avatar_url: str | None
+    steam_sync_status: str | None
+    last_synced_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
 class AccessTokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
 
 class AuthResponse(AccessTokenResponse):
-    pass
+    user: AuthUserResponse
