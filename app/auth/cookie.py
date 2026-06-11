@@ -6,15 +6,13 @@ from app.core.config import settings
 def set_refresh_cookie(response: Response, refresh_token: str) -> None:
     is_dev = settings.APP_ENV == "development"
 
-    cookie_domain = None if is_dev else ".gembti.cloud"
-
     response.set_cookie(
         key=settings.REFRESH_COOKIE_NAME,
         value=refresh_token,
         httponly=True,
         secure=not is_dev,
-        samesite="lax",
-        domain=cookie_domain,
+        samesite="lax" if not is_dev else None,
+        domain=None,
         max_age=settings.REFRESH_TOKEN_TTL_SECONDS,
         path=settings.REFRESH_COOKIE_PATH,
     )
