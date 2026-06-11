@@ -69,7 +69,15 @@ async def verify_email_api(request: EmailCodeVerifyRequest) -> MessageResponse:
     return MessageResponse(message="이메일 인증이 완료되었습니다.")
 
 
-@router.get("/nickname/check", response_model=NicknameCheckResponse)
+@router.get(
+    "/nickname/check",
+    response_model=NicknameCheckResponse,
+    responses={
+        400: _err("닉네임 형식이 올바르지 않습니다."),
+        409: _err("이미 사용 중인 닉네임입니다."),
+        422: _err("요청 형식이 올바르지 않습니다."),
+    },
+)
 async def check_nickname_api(
     nickname: str = Query(min_length=2, max_length=8, pattern=r"^[가-힣A-Za-z0-9]+$"),
     db: AsyncSession = Depends(get_db),
