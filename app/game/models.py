@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import date, datetime  # noqa: TC003
 from enum import StrEnum
-from typing import TYPE_CHECKING
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
@@ -11,22 +10,16 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
-    Enum,
-    ForeignKey,
     Integer,
     Numeric,
     String,
     Text,
-    UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
-from app.core.enums import enum_values
 
-if TYPE_CHECKING:
-    from app.auth.models import User
 
 
 class SoftDeleteStatus(StrEnum):
