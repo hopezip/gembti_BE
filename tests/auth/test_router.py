@@ -17,7 +17,7 @@ async def test_refresh_without_cookie_returns_401() -> None:
         response = await client.post("/api/v1/auth/token/refresh")
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "Refresh Token이 없습니다."
+    assert response.json() == {"error": "Refresh Token이 없습니다."}
 
 
 @pytest.mark.asyncio
