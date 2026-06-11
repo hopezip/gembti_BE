@@ -48,7 +48,7 @@ async def search_games_api(
 
 @router.get("/trending", response_model=TrendingGamesResponse)
 async def trending_games_api(
-    limit: int = Query(default=10, ge=1, le=50, description="반환 개수"),
+    limit: int = Query(default=10, ge=1, description="반환 개수"),
     db: AsyncSession = Depends(get_db),
 ) -> TrendingGamesResponse:
     return await get_trending_games_service(db, limit=limit)
@@ -56,7 +56,7 @@ async def trending_games_api(
 
 @router.get("/new-releases", response_model=NewReleasesResponse)
 async def new_releases_api(
-    limit: int = Query(default=10, ge=1, le=50, description="반환 개수"),
+    limit: int = Query(default=10, ge=1, description="반환 개수"),
     db: AsyncSession = Depends(get_db),
 ) -> NewReleasesResponse:
     return await get_new_releases_service(db, limit=limit)
