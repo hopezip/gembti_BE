@@ -9,9 +9,9 @@ from app.core.exceptions import register_exception_handlers
 from app.core.middlewares import register_middlewares
 from app.core.redis import close_redis
 from app.game.router import router as game_router
+from app.recommend.router import router as recommend_router
 from app.steam.router import router as steam_router
 from app.survey.router import router as survey_router
-from app.recommend.router import router as recommend_router
 
 
 @asynccontextmanager
@@ -37,8 +37,6 @@ def create_app() -> FastAPI:
     async def health() -> JSONResponse:
         return JSONResponse({"status": "ok"})
 
-
-
     API_PREFIX = "/api/v1"
     app.include_router(auth_router, prefix=API_PREFIX)
     app.include_router(survey_router, prefix=API_PREFIX)
@@ -51,6 +49,7 @@ def create_app() -> FastAPI:
         if app.openapi_schema:
             return app.openapi_schema
         from fastapi.openapi.utils import get_openapi
+
         schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
         error_schema = {
             "title": "ErrorResponse",

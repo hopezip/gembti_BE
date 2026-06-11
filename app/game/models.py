@@ -21,7 +21,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
 
-
 class SoftDeleteStatus(StrEnum):
     ACTIVE = "active"
     DELETED = "deleted"
@@ -66,5 +65,3 @@ class Game(Base):
         nullable=True,
     )
     steam_detail_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-
-
