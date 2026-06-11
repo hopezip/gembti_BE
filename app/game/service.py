@@ -467,7 +467,7 @@ async def search_games_service(
 
 async def get_trending_games_service(
     session: AsyncSession,
-    limit: int = 10,
+    limit: int = 12,
 ) -> TrendingGamesResponse:  # type: ignore[name-defined]  # noqa: F821
     from app.game.repository import get_trending_games
     from app.game.schemas import HomeGameItem, TrendingGamesResponse
@@ -489,7 +489,7 @@ async def get_trending_games_service(
 
 async def get_new_releases_service(
     session: AsyncSession,
-    limit: int = 10,
+    limit: int = 12,
 ) -> NewReleasesResponse:  # type: ignore[name-defined]  # noqa: F821
     from app.game.repository import get_new_releases
     from app.game.schemas import HomeGameItem, NewReleasesResponse

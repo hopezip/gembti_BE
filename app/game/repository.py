@@ -158,7 +158,7 @@ async def get_developer_games(
     return list(result.scalars().all())
 
 
-async def get_trending_games(session: AsyncSession, limit: int = 10) -> list[Game]:
+async def get_trending_games(session: AsyncSession, limit: int = 12) -> list[Game]:
     """동시접속자수 내림차순 (null 제외)."""
     result = await session.execute(
         select(Game)
@@ -169,7 +169,7 @@ async def get_trending_games(session: AsyncSession, limit: int = 10) -> list[Gam
     return list(result.scalars().all())
 
 
-async def get_new_releases(session: AsyncSession, limit: int = 10) -> list[Game]:
+async def get_new_releases(session: AsyncSession, limit: int = 12) -> list[Game]:
     """출시일 최신순 (null 제외)."""
     result = await session.execute(
         select(Game)
