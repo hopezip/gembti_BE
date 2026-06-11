@@ -31,7 +31,6 @@ class Gender(StrEnum):
     MALE = "male"
     FEMALE = "female"
     OTHER = "other"
-    PRIVATE = "private"
 
 
 class EmailVerificationPurpose(StrEnum):
