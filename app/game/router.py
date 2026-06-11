@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, Query
 
@@ -26,8 +26,8 @@ from app.game.service import (
 
 router = APIRouter(prefix="/games", tags=["게임"])
 
-_500 = {500: {"description": "Internal Server Error"}}
-_404_500 = {404: {"description": "Not Found"}, **_500}
+_500: dict[int | str, dict[str, Any]] = {500: {"description": "Internal Server Error"}}
+_404_500: dict[int | str, dict[str, Any]] = {404: {"description": "Not Found"}, **_500}
 
 
 @router.get("/search", response_model=SearchResponse, responses=_500)
