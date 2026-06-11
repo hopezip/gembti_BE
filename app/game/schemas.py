@@ -137,8 +137,6 @@ class GameDetailDataResponse(BaseModel):
     age_rating: str
     on_sale: bool
     developer_games: list[GameSummaryResponse]
-    ai_match: None = None
-    review_stats: None = None
 
 
 class GameDetailResponse(BaseModel):
