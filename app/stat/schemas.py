@@ -1,12 +1,9 @@
 # stat Response 스키마
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from datetime import datetime  # noqa: TC003
 
 from pydantic import BaseModel, ConfigDict
-
-if TYPE_CHECKING:
-    from datetime import datetime
 
 
 class UserStatsResponse(BaseModel):
