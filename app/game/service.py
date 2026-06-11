@@ -4,7 +4,8 @@ import asyncio
 from datetime import UTC, date, datetime
 import logging
 import re
-from typing import TYPE_CHECKING
+from html.parser import HTMLParser
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -252,10 +253,6 @@ _CATEGORY_NORMALIZE: dict[str, str] = {
     "온라인 PvP": "온라인 플레이어 대전",
 }
 
-# 필터 옵션 고정 목록 (사용자 정의 순서)
-_FILTER_GENRES = ["액션", "어드벤처", "롤플레잉", "전략", "시뮬레이션", "캐주얼", "대규모 멀티플레이어", "스포츠", "레이싱", "인디"]
-_FILTER_TAGS = ["싱글플레이어", "협동", "온라인 협동", "멀티플레이어", "플레이어 대전", "온라인 플레이어 대전"]
-
 # Steam 카테고리 설명 → FE 플레이 모드 코드 (정규화 이름 기준으로도 처리)
 _CATEGORY_TO_PLAY_MODE: dict[str, str] = {
     "Single-player": "SINGLE",
@@ -273,20 +270,6 @@ _CATEGORY_TO_PLAY_MODE: dict[str, str] = {
     "PvP": "MULTI",
     "플레이어 대전": "MULTI",
 }
-
-_PRICE_RANGES = [
-    {"label": "무료", "min": 0, "max": 0},
-    {"label": "1만원 이하", "min": 1, "max": 10000},
-    {"label": "1만원~3만원", "min": 10000, "max": 30000},
-    {"label": "3만원 이상", "min": 30000, "max": -1},
-]
-
-_PLAY_MODE_OPTIONS = [
-    {"value": "SINGLE", "label": "싱글플레이"},
-    {"value": "MULTI", "label": "멀티플레이"},
-    {"value": "CO_OP", "label": "협동플레이"},
-]
-
 
 def _parse_requirements_html(html: str) -> dict:
     """Steam PC requirements HTML에서 사양 항목 추출."""
@@ -391,6 +374,24 @@ def _rating_from_score(review_score: float | None) -> float | None:
     return round(float(review_score) / 20, 1)
 
 
+class _HTMLTextExtractor(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self._parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self._parts.append(data)
+
+    def get_text(self) -> str:
+        return re.sub(r"\s+", " ", " ".join(self._parts)).strip()
+
+
+def _strip_html(html: str) -> str:
+    extractor = _HTMLTextExtractor()
+    extractor.feed(html)
+    return extractor.get_text()
+
+
 def _build_price_info(price_krw: int | None, discount_percent: int, is_free: bool) -> dict:
     original = 0 if is_free else (price_krw or 0)
     if discount_percent > 0 and original > 0:
@@ -457,18 +458,6 @@ async def search_games_service(
         )
     )
 
-
-async def get_filter_options_service(session: AsyncSession) -> "FilterOptionsResponse":  # type: ignore[name-defined]  # noqa: F821
-    from app.game.schemas import FilterOptionsData, FilterOptionsResponse, PlayModeOption, PriceRangeOption
-
-    return FilterOptionsResponse(
-        data=FilterOptionsData(
-            categories=_FILTER_TAGS,    # 상위 필터
-            genres=_FILTER_GENRES,      # 하위 필터
-            price_ranges=[PriceRangeOption(**p) for p in _PRICE_RANGES],
-            play_modes=[PlayModeOption(**m) for m in _PLAY_MODE_OPTIONS],
-        )
-    )
 
 
 async def get_trending_games_service(
@@ -588,7 +577,7 @@ async def get_game_detail_service(
             game_id=game.id,
             title=game.title,
             description=game.description or "",
-            full_description=(
+            full_description=_strip_html(
                 detail_json.get("detailed_description")
                 or detail_json.get("about_the_game")
                 or game.description

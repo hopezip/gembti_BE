@@ -1,6 +1,38 @@
 from __future__ import annotations
 
+from enum import StrEnum
+
 from pydantic import BaseModel
+
+
+class SortOption(StrEnum):
+    POPULAR = "popular"
+    RATING = "rating"
+    RELEASE_DATE = "release_date"
+    PRICE_ASC = "price_asc"
+    PRICE_DESC = "price_desc"
+
+
+class GenreOption(StrEnum):
+    ACTION = "액션"
+    ADVENTURE = "어드벤처"
+    RPG = "롤플레잉"
+    STRATEGY = "전략"
+    SIMULATION = "시뮬레이션"
+    CASUAL = "캐주얼"
+    MASSIVELY_MULTIPLAYER = "대규모 멀티플레이어"
+    SPORTS = "스포츠"
+    RACING = "레이싱"
+    INDIE = "인디"
+
+
+class CategoryOption(StrEnum):
+    SINGLE = "싱글플레이어"
+    CO_OP = "협동"
+    ONLINE_CO_OP = "온라인 협동"
+    MULTI = "멀티플레이어"
+    PVP = "플레이어 대전"
+    ONLINE_PVP = "온라인 플레이어 대전"
 
 
 class PriceInfoResponse(BaseModel):
@@ -30,31 +62,6 @@ class SearchDataResponse(BaseModel):
 class SearchResponse(BaseModel):
     status: str = "SUCCESS"
     data: SearchDataResponse
-
-
-# ── 필터 옵션 ─────────────────────────────────────────────────────────────────
-
-class PriceRangeOption(BaseModel):
-    label: str
-    min: int
-    max: int
-
-
-class PlayModeOption(BaseModel):
-    value: str
-    label: str
-
-
-class FilterOptionsData(BaseModel):
-    categories: list[str]  # 상위 필터: 싱글플레이어·협동·멀티플레이어 등
-    genres: list[str]      # 하위 필터: 액션·RPG·전략 등
-    price_ranges: list[PriceRangeOption]
-    play_modes: list[PlayModeOption]
-
-
-class FilterOptionsResponse(BaseModel):
-    status: str = "SUCCESS"
-    data: FilterOptionsData
 
 
 # ── 홈 공통 카드 ──────────────────────────────────────────────────────────────

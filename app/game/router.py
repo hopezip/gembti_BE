@@ -5,9 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.core.exceptions import NotFoundException
-from app.game.schemas import FilterOptionsResponse, GameDetailResponse, NewReleasesResponse, SearchResponse, TrendingGamesResponse
+from app.game.schemas import CategoryOption, GameDetailResponse, GenreOption, NewReleasesResponse, SearchResponse, SortOption, TrendingGamesResponse
 from app.game.service import (
-    get_filter_options_service,
     get_game_detail_service,
     get_new_releases_service,
     get_trending_games_service,
@@ -21,22 +20,13 @@ router = APIRouter(prefix="/games", tags=["게임"])
 async def search_games_api(
     q: str = Query(default="", description="검색어 (제목·장르)"),
     page: int = Query(default=1, ge=1, description="페이지 번호"),
-    sort: str = Query(
-        default="relevance",
-        description="정렬: relevance | rating | release_date | price_asc | price_desc",
-    ),
-    category: list[str] = Query(default=[], description="카테고리 필터 — 상위 (예: ?category=싱글플레이어&category=협동)"),
-    genre: list[str] = Query(default=[], description="장르 필터 — 하위 (예: ?genre=액션&genre=롤플레잉)"),
+    sort: SortOption = Query(default=SortOption.POPULAR, description="정렬 기준"),
+    category: list[CategoryOption] = Query(default=[], description="카테고리 필터 — 상위"),
+    genre: list[GenreOption] = Query(default=[], description="장르 필터 — 하위"),
     db: AsyncSession = Depends(get_db),
 ) -> SearchResponse:
-    return await search_games_service(db, q=q, page=page, sort=sort, genres=genre, categories=category)
+    return await search_games_service(db, q=q, page=page, sort=sort, genres=[str(g) for g in genre], categories=[str(c) for c in category])
 
-
-@router.get("/filter-options", response_model=FilterOptionsResponse)
-async def filter_options_api(
-    db: AsyncSession = Depends(get_db),
-) -> FilterOptionsResponse:
-    return await get_filter_options_service(db)
 
 
 @router.get("/trending", response_model=TrendingGamesResponse)

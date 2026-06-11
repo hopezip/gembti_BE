@@ -1,7 +1,7 @@
 # games 저장/조회
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Text, cast, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -74,7 +74,7 @@ async def search_games(
     Returns:
         (games, total_count)
     """
-    conds = [Game.is_active.is_(True)]
+    conds: list[Any] = [Game.is_active.is_(True)]
     if q:
         conds.append(
             or_(
@@ -109,7 +109,7 @@ async def search_games(
         order_by = [Game.price_krw.desc().nulls_last()]
     elif sort == "release_date":
         order_by = [Game.release_date.desc().nulls_last()]
-    else:
+    else:  # popular
         order_by = [Game.review_count.desc().nulls_last(), Game.review_score.desc().nulls_last()]
 
     offset = (page - 1) * _PAGE_SIZE
