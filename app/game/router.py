@@ -28,10 +28,10 @@ router = APIRouter(prefix="/games", tags=["게임"])
 
 _common: dict[int | str, dict[str, Any]] = {
     400: {"description": "Bad Request"},
+    404: {"description": "Not Found"},
     422: {"description": "Validation Error"},
     500: {"description": "Internal Server Error"},
 }
-_with_404: dict[int | str, dict[str, Any]] = {404: {"description": "Not Found"}, **_common}
 
 
 @router.get("/search", response_model=SearchResponse, responses=_common)
@@ -69,7 +69,7 @@ async def new_releases_api(
     return await get_new_releases_service(db, limit=limit)
 
 
-@router.get("/{game_id}", response_model=GameDetailResponse, responses=_with_404)
+@router.get("/{game_id}", response_model=GameDetailResponse, responses=_common)
 async def game_detail_api(
     game_id: int,
     db: AsyncSession = Depends(get_db),
