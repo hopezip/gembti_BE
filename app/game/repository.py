@@ -85,19 +85,13 @@ async def search_games(
 
     # 장르 필터: 선택한 장르 각각을 AND로 적용, 동일 의미 DB 값은 OR
     for db_vals in filter_genres or []:
-        conds.append(
-            or_(*(cast(Game.genres, Text).ilike(f'%"{v}"%') for v in db_vals))
-        )
+        conds.append(or_(*(cast(Game.genres, Text).ilike(f'%"{v}"%') for v in db_vals)))
 
     # 카테고리(상위) 필터: 선택한 카테고리 각각을 AND로 적용, 동일 의미 DB 값은 OR
     for db_vals in filter_categories or []:
-        conds.append(
-            or_(*(cast(Game.category, Text).ilike(f'%"{v}"%') for v in db_vals))
-        )
+        conds.append(or_(*(cast(Game.category, Text).ilike(f'%"{v}"%') for v in db_vals)))
 
-    total_result = await session.execute(
-        select(func.count()).select_from(Game).where(*conds)
-    )
+    total_result = await session.execute(select(func.count()).select_from(Game).where(*conds))
     total = total_result.scalar_one()
 
     order_by: list = []
@@ -121,9 +115,7 @@ async def search_games(
 
 async def get_game_by_id(session: AsyncSession, game_id: int) -> Game | None:
     """PK로 활성 게임 1건 조회."""
-    result = await session.execute(
-        select(Game).where(Game.id == game_id, Game.is_active.is_(True))
-    )
+    result = await session.execute(select(Game).where(Game.id == game_id, Game.is_active.is_(True)))
     return result.scalar_one_or_none()
 
 

@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime
 import logging
 import re
 from html.parser import HTMLParser
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import httpx
 
@@ -271,6 +271,7 @@ _CATEGORY_TO_PLAY_MODE: dict[str, str] = {
     "플레이어 대전": "MULTI",
 }
 
+
 def _parse_requirements_html(html: str) -> dict:
     """Steam PC requirements HTML에서 사양 항목 추출."""
     result = {"os": "", "processor": "", "memory": "", "graphics": "", "storage": ""}
@@ -400,7 +401,7 @@ def _build_price_info(price_krw: int | None, discount_percent: int, is_free: boo
     return {"original_price": original, "sale_price": None, "discount_rate": 0}
 
 
-def _game_to_summary(game: "Game") -> dict:  # type: ignore[name-defined]  # noqa: F821
+def _game_to_summary(game: Game) -> dict:  # type: ignore[name-defined]  # noqa: F821
     return {
         "game_id": game.id,
         "title": game.title,
@@ -417,7 +418,7 @@ async def search_games_service(
     sort: str,
     genres: list[str] | None = None,
     categories: list[str] | None = None,
-) -> "SearchResponse":  # type: ignore[name-defined]  # noqa: F821
+) -> SearchResponse:  # type: ignore[name-defined]  # noqa: F821
     from app.game.repository import search_games as repo_search
     from app.game.schemas import (
         GameSearchItemResponse,
@@ -431,8 +432,12 @@ async def search_games_service(
     filter_categories = [_category_db_values(c) for c in (categories or [])]
 
     games, total = await repo_search(
-        session, q=q, page=page, sort=sort,
-        filter_genres=filter_genres, filter_categories=filter_categories,
+        session,
+        q=q,
+        page=page,
+        sort=sort,
+        filter_genres=filter_genres,
+        filter_categories=filter_categories,
     )
     page_size = 12
     items = []
@@ -459,11 +464,10 @@ async def search_games_service(
     )
 
 
-
 async def get_trending_games_service(
     session: AsyncSession,
     limit: int = 10,
-) -> "TrendingGamesResponse":  # type: ignore[name-defined]  # noqa: F821
+) -> TrendingGamesResponse:  # type: ignore[name-defined]  # noqa: F821
     from app.game.repository import get_trending_games
     from app.game.schemas import HomeGameItem, TrendingGamesResponse
 
@@ -485,7 +489,7 @@ async def get_trending_games_service(
 async def get_new_releases_service(
     session: AsyncSession,
     limit: int = 10,
-) -> "NewReleasesResponse":  # type: ignore[name-defined]  # noqa: F821
+) -> NewReleasesResponse:  # type: ignore[name-defined]  # noqa: F821
     from app.game.repository import get_new_releases
     from app.game.schemas import HomeGameItem, NewReleasesResponse
 
@@ -508,7 +512,7 @@ async def get_new_releases_service(
 async def get_game_detail_service(
     session: AsyncSession,
     game_id: int,
-) -> "GameDetailResponse | None":  # type: ignore[name-defined]  # noqa: F821
+) -> GameDetailResponse | None:  # type: ignore[name-defined]  # noqa: F821
     from app.game.repository import get_developer_games, get_game_by_id
     from app.game.schemas import (
         GameDetailDataResponse,
@@ -538,13 +542,15 @@ async def get_game_detail_service(
 
     # PC 사양
     pc_req = detail_json.get("pc_requirements") or {}
-    min_spec = _parse_requirements_html(pc_req.get("minimum", "") if isinstance(pc_req, dict) else "")
-    rec_spec = _parse_requirements_html(pc_req.get("recommended", "") if isinstance(pc_req, dict) else "")
+    min_spec = _parse_requirements_html(
+        pc_req.get("minimum", "") if isinstance(pc_req, dict) else ""
+    )
+    rec_spec = _parse_requirements_html(
+        pc_req.get("recommended", "") if isinstance(pc_req, dict) else ""
+    )
 
     # 스크린샷
-    screenshots = [
-        s["path_full"] for s in detail_json.get("screenshots", []) if "path_full" in s
-    ]
+    screenshots = [s["path_full"] for s in detail_json.get("screenshots", []) if "path_full" in s]
 
     # 트레일러
     trailer_url: str | None = None

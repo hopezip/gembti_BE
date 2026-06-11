@@ -43,12 +43,13 @@ class PriceInfoResponse(BaseModel):
 
 # ── 검색 ─────────────────────────────────────────────────────────────────────
 
+
 class GameSearchItemResponse(BaseModel):
     game_id: int
     title: str
     thumbnail_url: str | None
     categories: list[str]  # 상위 필터: 싱글플레이어·협동·멀티플레이어 등
-    genres: list[str]      # 하위 필터: 액션·RPG·전략 등
+    genres: list[str]  # 하위 필터: 액션·RPG·전략 등
     rating: float | None
     price_info: PriceInfoResponse
 
@@ -65,6 +66,7 @@ class SearchResponse(BaseModel):
 
 
 # ── 홈 공통 카드 ──────────────────────────────────────────────────────────────
+
 
 class HomeGameItem(BaseModel):
     game_id: int
@@ -86,6 +88,7 @@ class NewReleasesResponse(BaseModel):
 
 
 # ── 게임 상세 ──────────────────────────────────────────────────────────────────
+
 
 class SystemSpecResponse(BaseModel):
     os: str = ""

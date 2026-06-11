@@ -1,11 +1,23 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.core.exceptions import NotFoundException
-from app.game.schemas import CategoryOption, GameDetailResponse, GenreOption, NewReleasesResponse, SearchResponse, SortOption, TrendingGamesResponse
+from app.game.schemas import (
+    CategoryOption,
+    GameDetailResponse,
+    GenreOption,
+    NewReleasesResponse,
+    SearchResponse,
+    SortOption,
+    TrendingGamesResponse,
+)
 from app.game.service import (
     get_game_detail_service,
     get_new_releases_service,
@@ -25,8 +37,14 @@ async def search_games_api(
     genre: list[GenreOption] = Query(default=[], description="장르 필터 — 하위"),
     db: AsyncSession = Depends(get_db),
 ) -> SearchResponse:
-    return await search_games_service(db, q=q, page=page, sort=sort, genres=[str(g) for g in genre], categories=[str(c) for c in category])
-
+    return await search_games_service(
+        db,
+        q=q,
+        page=page,
+        sort=sort,
+        genres=[str(g) for g in genre],
+        categories=[str(c) for c in category],
+    )
 
 
 @router.get("/trending", response_model=TrendingGamesResponse)
