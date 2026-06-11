@@ -5,13 +5,14 @@ from app.core.config import settings
 
 def set_refresh_cookie(response: Response, refresh_token: str) -> None:
     secure = settings.APP_ENV != "development"
+    domain = ".gembti.cloud" if secure else None
     response.set_cookie(
         key=settings.REFRESH_COOKIE_NAME,
         value=refresh_token,
         httponly=True,
         secure=secure,
-        samesite="lax" if secure else "none",
-        domain=".gembti.cloud",
+        samesite="none" if secure else "lax",
+        domain=domain,
         max_age=settings.REFRESH_TOKEN_TTL_SECONDS,
         path=settings.REFRESH_COOKIE_PATH,
     )
@@ -23,6 +24,6 @@ def delete_refresh_cookie(response: Response) -> None:
         path=settings.REFRESH_COOKIE_PATH,
         secure=settings.APP_ENV != "development",
         httponly=True,
-        samesite="lax" if settings.APP_ENV != "development" else "none",
-        domain=".gembti.cloud",
+        samesite="none" if settings.APP_ENV != "development" else "lax",
+        domain=".gembti.cloud" if settings.APP_ENV != "development" else None,
     )

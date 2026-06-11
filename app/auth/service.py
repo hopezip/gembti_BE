@@ -38,6 +38,7 @@ from app.auth.repository import (
 from app.auth.schemas import (
     AccessTokenResponse,
     AuthResponse,
+    AuthUserResponse,
     LoginRequest,
     NicknameCheckResponse,
     PasswordResetRequest,
@@ -73,7 +74,7 @@ async def issue_auth_tokens(
     await save_refresh_token(user.id, refresh_token, provider)
     set_refresh_cookie(response, refresh_token)
 
-    return AuthResponse(access_token=access_token)
+    return AuthResponse(access_token=access_token, user=AuthUserResponse.model_validate(user))
 
 
 async def send_email_code(

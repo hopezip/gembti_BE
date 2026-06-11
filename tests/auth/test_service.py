@@ -49,8 +49,8 @@ async def test_issue_auth_tokens_returns_access_and_sets_refresh_cookie(
 
     assert decode_token(token_response.access_token)["type"] == "access"
     assert decode_token(saved[0][1])["type"] == "refresh"
+    assert token_response.user.id == 7
     assert saved[0][1] in response.headers["set-cookie"]
-    assert not hasattr(token_response, "user")
     assert not hasattr(token_response, "refresh_token")
 
 
@@ -82,7 +82,7 @@ async def test_login_returns_tokens_for_valid_credentials(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     user = create_user()
-    expected = AuthResponse(access_token="access-token")
+    expected = AuthResponse(access_token="access-token", user=user)
 
     async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
         return user
