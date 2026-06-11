@@ -26,11 +26,15 @@ from app.game.service import (
 
 router = APIRouter(prefix="/games", tags=["게임"])
 
-_500: dict[int | str, dict[str, Any]] = {500: {"description": "Internal Server Error"}}
-_404_500: dict[int | str, dict[str, Any]] = {404: {"description": "Not Found"}, **_500}
+_common: dict[int | str, dict[str, Any]] = {
+    400: {"description": "Bad Request"},
+    404: {"description": "Not Found"},
+    422: {"description": "Validation Error"},
+    500: {"description": "Internal Server Error"},
+}
 
 
-@router.get("/search", response_model=SearchResponse, responses=_500)
+@router.get("/search", response_model=SearchResponse, responses=_common)
 async def search_games_api(
     q: str = Query(default="", description="검색어 (제목·장르)"),
     page: int = Query(default=1, ge=1, description="페이지 번호"),
@@ -49,23 +53,23 @@ async def search_games_api(
     )
 
 
-@router.get("/trending", response_model=TrendingGamesResponse, responses=_500)
+@router.get("/trending", response_model=TrendingGamesResponse, responses=_common)
 async def trending_games_api(
-    limit: int = Query(default=10, ge=1, description="반환 개수"),
+    limit: int = Query(default=12, ge=1, description="반환 개수"),
     db: AsyncSession = Depends(get_db),
 ) -> TrendingGamesResponse:
     return await get_trending_games_service(db, limit=limit)
 
 
-@router.get("/new-releases", response_model=NewReleasesResponse, responses=_500)
+@router.get("/new-releases", response_model=NewReleasesResponse, responses=_common)
 async def new_releases_api(
-    limit: int = Query(default=10, ge=1, description="반환 개수"),
+    limit: int = Query(default=12, ge=1, description="반환 개수"),
     db: AsyncSession = Depends(get_db),
 ) -> NewReleasesResponse:
     return await get_new_releases_service(db, limit=limit)
 
 
-@router.get("/{game_id}", response_model=GameDetailResponse, responses=_404_500)
+@router.get("/{game_id}", response_model=GameDetailResponse, responses=_common)
 async def game_detail_api(
     game_id: int,
     db: AsyncSession = Depends(get_db),
