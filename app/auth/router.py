@@ -37,8 +37,17 @@ from app.core.exceptions import NotFoundException, UnauthorizedException
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
+_err = lambda msg: {"content": {"application/json": {"example": {"error": msg}}}}  # noqa: E731
 
-@router.post("/email/send-code", response_model=MessageResponse)
+
+@router.post(
+    "/email/send-code",
+    response_model=MessageResponse,
+    responses={
+        400: _err("잘못된 이메일 형식"),
+        409: _err("이미 가입된 이메일입니다."),
+    },
+)
 async def send_email_code_api(
     request: EmailCodeSendRequest,
     db: AsyncSession = Depends(get_db),
@@ -47,7 +56,14 @@ async def send_email_code_api(
     return MessageResponse(message="인증번호를 발송했습니다.")
 
 
-@router.post("/email/verify", response_model=MessageResponse)
+@router.post(
+    "/email/verify",
+    response_model=MessageResponse,
+    responses={
+        400: _err("인증번호가 만료되었거나 일치하지 않습니다."),
+        422: _err("요청 형식이 올바르지 않습니다."),
+    },
+)
 async def verify_email_api(request: EmailCodeVerifyRequest) -> MessageResponse:
     await verify_email(request.email, request.purpose, request.code)
     return MessageResponse(message="이메일 인증이 완료되었습니다.")
@@ -61,7 +77,16 @@ async def check_nickname_api(
     return await check_nickname_available(db, nickname)
 
 
-@router.post("/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/signup",
+    response_model=AuthResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        403: _err("이메일 인증이 필요합니다."),
+        409: _err("이미 사용 중인 이메일입니다."),
+        422: _err("요청 형식이 올바르지 않습니다."),
+    },
+)
 async def signup_api(
     request: SignupRequest,
     response: Response,
@@ -70,7 +95,15 @@ async def signup_api(
     return await signup(db, response, request)
 
 
-@router.post("/login", response_model=AuthResponse)
+@router.post(
+    "/login",
+    response_model=AuthResponse,
+    responses={
+        401: _err("이메일 또는 비밀번호가 일치하지 않습니다."),
+        403: _err("사용할 수 없는 계정입니다."),
+        422: _err("요청 형식이 올바르지 않습니다."),
+    },
+)
 async def login_api(
     request: LoginRequest,
     response: Response,
@@ -98,7 +131,13 @@ async def _refresh_api(
     return await refresh_access_token(db, response, refresh_token)
 
 
-@router.post("/token/refresh", response_model=AccessTokenResponse)
+@router.post(
+    "/token/refresh",
+    response_model=AccessTokenResponse,
+    responses={
+        401: _err("Refresh Token이 없거나 유효하지 않습니다."),
+    },
+)
 async def refresh_token_api(
     response: Response,
     refresh_token: str | None = Cookie(default=None, alias=settings.REFRESH_COOKIE_NAME),
@@ -107,7 +146,13 @@ async def refresh_token_api(
     return await _refresh_api(response=response, refresh_token=refresh_token, db=db)
 
 
-@router.post("/refresh", response_model=AccessTokenResponse)
+@router.post(
+    "/refresh",
+    response_model=AccessTokenResponse,
+    responses={
+        401: _err("Refresh Token이 없거나 유효하지 않습니다."),
+    },
+)
 async def refresh_api(
     response: Response,
     refresh_token: str | None = Cookie(default=None, alias=settings.REFRESH_COOKIE_NAME),
@@ -116,7 +161,13 @@ async def refresh_api(
     return await _refresh_api(response=response, refresh_token=refresh_token, db=db)
 
 
-@router.post("/logout", response_model=MessageResponse)
+@router.post(
+    "/logout",
+    response_model=MessageResponse,
+    responses={
+        401: _err("인증 실패"),
+    },
+)
 async def logout_api(
     response: Response,
     user_id: int = Depends(get_current_user_id),
@@ -134,7 +185,14 @@ async def logout_api(
     return MessageResponse(message="로그아웃 되었습니다.")
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get(
+    "/me",
+    response_model=UserResponse,
+    responses={
+        401: _err("인증 실패"),
+        404: _err("사용자를 찾을 수 없습니다."),
+    },
+)
 async def me_api(
     user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
@@ -156,7 +214,15 @@ async def me_api(
     )
 
 
-@router.delete("/me", response_model=WithdrawResponse)
+@router.delete(
+    "/me",
+    response_model=WithdrawResponse,
+    responses={
+        400: _err("비밀번호가 일치하지 않습니다."),
+        401: _err("인증 실패"),
+        403: _err("탈퇴 처리할 수 없는 계정입니다."),
+    },
+)
 async def withdraw_me_api(
     response: Response,
     request: WithdrawRequest = Body(default_factory=WithdrawRequest),

@@ -15,12 +15,10 @@ from app.steam.client import (
     build_steam_openid_url,
     get_owned_games,
     get_player_summary,
-    get_recently_played_games,
     verify_steam_openid,
 )
 from app.steam.models import SteamAccount, SteamSyncStatus, UserLibraryGame
 from app.steam.repository import (
-    get_library_games_by_user_id,
     get_steam_account_by_steam_id,
     get_steam_account_by_user_id,
     save_steam_account,
@@ -30,9 +28,6 @@ from app.steam.schemas import (
     SteamCompleteSignupRequest,
     SteamCompleteSignupResponse,
     SteamLinkResponse,
-    SteamRecentlyPlayedGameResponse,
-    SteamRecentlyPlayedResponse,
-    SteamStatusResponse,
     SteamSyncResponse,
 )
 from app.steam.signup_store import (
@@ -227,30 +222,6 @@ async def link_steam_account(
     )
 
 
-async def get_steam_status(db: AsyncSession, user_id: int) -> SteamStatusResponse:
-    steam_account = await get_steam_account_by_user_id(db, user_id)
-    if steam_account is None:
-        return SteamStatusResponse(
-            steam_linked=False,
-            next=STEAM_NEXT_SURVEY,
-            message="Steam 계정이 연동되어 있지 않습니다.",
-        )
-
-    library_games = await get_library_games_by_user_id(db, user_id)
-    library_games_count = len(library_games)
-
-    return SteamStatusResponse(
-        steam_linked=True,
-        steam_id_64=str(steam_account.steam_id_64),
-        steam_avatar_url=steam_account.avatar_url,
-        steam_sync_status=steam_account.steam_sync_status,
-        last_synced_at=steam_account.last_synced_at,
-        library_games_count=library_games_count,
-        next=get_next_step_for_sync_status(steam_account.steam_sync_status),
-        message=get_message_for_sync_status(steam_account.steam_sync_status),
-    )
-
-
 async def sync_steam_library(db: AsyncSession, user_id: int) -> SteamSyncResponse:
     steam_account = await get_steam_account_by_user_id(db, user_id)
     if steam_account is None:
@@ -285,29 +256,6 @@ async def sync_steam_library(db: AsyncSession, user_id: int) -> SteamSyncRespons
         last_synced_at=synced_at,
         next=get_next_step_for_sync_status(steam_account.steam_sync_status),
         message=get_message_for_sync_status(steam_account.steam_sync_status),
-    )
-
-
-async def get_recently_played(db: AsyncSession, user_id: int) -> SteamRecentlyPlayedResponse:
-    steam_account = await get_steam_account_by_user_id(db, user_id)
-    if steam_account is None:
-        raise NotFoundException("Steam 계정이 연동되어 있지 않습니다.")
-
-    recent_games = await get_recently_played_games(steam_account.steam_id_64)
-    sync_status = map_visibility_to_sync_status(recent_games.visibility)
-    games = [
-        SteamRecentlyPlayedGameResponse(
-            steam_app_id=parse_steam_int(steam_game["appid"]),
-            playtime_minutes=parse_steam_int(steam_game.get("playtime_forever", 0)),
-            playtime_2weeks=parse_steam_int(steam_game.get("playtime_2weeks", 0)),
-        )
-        for steam_game in recent_games.games
-        if "appid" in steam_game
-    ]
-    return SteamRecentlyPlayedResponse(
-        steam_sync_status=sync_status,
-        games=games,
-        message=None if games else get_message_for_sync_status(sync_status),
     )
 
 
