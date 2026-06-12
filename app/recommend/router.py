@@ -59,7 +59,7 @@ router = APIRouter(prefix="/recommendations", tags=["추천"])
     },
 )
 async def generate(
-    limit: int = Query(default=10, ge=1, le=50, description="반환할 추천 게임 개수"),
+    limit: int = Query(default=12, ge=1, le=50, description="반환할 추천 게임 개수"),
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ):
