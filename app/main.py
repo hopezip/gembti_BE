@@ -10,6 +10,7 @@ from app.core.middlewares import register_middlewares
 from app.core.redis import close_redis
 from app.game.router import router as game_router
 from app.recommend.router import router as recommend_router
+from app.stat.router import router as stat_router
 from app.steam.router import router as steam_router
 from app.survey.router import router as survey_router
 
@@ -40,7 +41,7 @@ def create_app() -> FastAPI:
     API_PREFIX = "/api/v1"
     app.include_router(auth_router, prefix=API_PREFIX)
     app.include_router(survey_router, prefix=API_PREFIX)
-    # app.include_router(stat_router, prefix=API_PREFIX)
+    app.include_router(stat_router, prefix=API_PREFIX)
     app.include_router(recommend_router, prefix=API_PREFIX)
     app.include_router(game_router, prefix=API_PREFIX)
     app.include_router(steam_router, prefix=API_PREFIX)
