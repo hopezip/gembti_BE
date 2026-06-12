@@ -7,7 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service
 from app.auth.models import LoginProvider, User, UserStatus, UserWithdrawalStatus
-from app.auth.schemas import AuthResponse, LoginRequest, PasswordResetRequest, WithdrawRequest
+from app.auth.schemas import (
+    AuthResponse,
+    AuthUserResponse,
+    LoginRequest,
+    PasswordResetRequest,
+    WithdrawRequest,
+)
 from app.core.exceptions import BadRequestException, ForbiddenException, UnauthorizedException
 from app.core.security import decode_token
 
@@ -82,7 +88,7 @@ async def test_login_returns_tokens_for_valid_credentials(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     user = create_user()
-    expected = AuthResponse(access_token="access-token", user=user)
+    expected = AuthResponse(access_token="access-token", user=AuthUserResponse.model_validate(user))
 
     async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
         return user
