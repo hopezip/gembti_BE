@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 
@@ -9,9 +10,9 @@ class AppException(Exception):
         super().__init__(detail)
 
 
-class NotFoundException(AppException):
-    def __init__(self, detail: str = "리소스를 찾을 수 없습니다.") -> None:
-        super().__init__(status.HTTP_404_NOT_FOUND, detail)
+class BadRequestException(AppException):
+    def __init__(self, detail: str = "잘못된 요청입니다.") -> None:
+        super().__init__(status.HTTP_400_BAD_REQUEST, detail)
 
 
 class UnauthorizedException(AppException):
@@ -24,9 +25,9 @@ class ForbiddenException(AppException):
         super().__init__(status.HTTP_403_FORBIDDEN, detail)
 
 
-class BadRequestException(AppException):
-    def __init__(self, detail: str = "잘못된 요청입니다.") -> None:
-        super().__init__(status.HTTP_400_BAD_REQUEST, detail)
+class NotFoundException(AppException):
+    def __init__(self, detail: str = "리소스를 찾을 수 없습니다.") -> None:
+        super().__init__(status.HTTP_404_NOT_FOUND, detail)
 
 
 class ConflictException(AppException):
@@ -39,5 +40,15 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
         return JSONResponse(
             status_code=exc.status_code,
-            content={"detail": exc.detail},
+            content={"error": exc.detail},
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(
+        request: Request,
+        exc: RequestValidationError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={"error": "요청 형식이 올바르지 않습니다."},
         )

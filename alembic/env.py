@@ -3,19 +3,15 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+# ── 모델 import (마이그레이션 자동 감지용) ─────────────────
+from app.auth.models import *  # noqa: F401, F403
 from app.core.config import settings
 from app.core.database import Base
-
-# ── 모델 import (마이그레이션 자동 감지용) ─────────────────
-# 각 모듈의 models.py 완성 후 아래에 추가
-# from app.auth.models import *        # noqa: F401, F403
-# from app.survey.models import *      # noqa: F401, F403
-# from app.stat.models import *        # noqa: F401, F403
-# from app.recommend.models import *   # noqa: F401, F403
-# from app.game.models import *        # noqa: F401, F403
-# from app.steam.models import *       # noqa: F401, F403
-# from app.support.models import *     # noqa: F401, F403
-# from app.chat.models import *        # noqa: F401, F403
+from app.game.models import *  # noqa: F401, F403
+from app.recommend.models import *  # noqa: F401, F403
+from app.stat.models import *  # noqa: F401, F403
+from app.steam.models import *  # noqa: F401, F403
+from app.survey.models import *  # noqa: F401, F403
 
 config = context.config
 

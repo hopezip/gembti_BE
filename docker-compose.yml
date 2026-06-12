@@ -66,7 +66,7 @@ services:
       target: runtime
     container_name: gembti_celery
     restart: unless-stopped
-    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=4
+    command: celery -A app.core.celery_app worker --beat --loglevel=info --concurrency=1
     env_file: .env
     depends_on:
       postgres:
@@ -87,8 +87,10 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - app
 

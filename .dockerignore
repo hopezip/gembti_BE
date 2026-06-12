@@ -14,4 +14,3 @@ docs/
 docker-compose*.yml
 .github/
 nginx/
-scripts/

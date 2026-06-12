@@ -1,8 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: ["**"]
   pull_request:
     branches: [main, develop]
 
@@ -87,6 +85,7 @@ jobs:
       OPENAI_API_KEY: sk-test-placeholder
       CELERY_BROKER_URL: redis://localhost:6379/1
       CELERY_RESULT_BACKEND: redis://localhost:6379/2
+      TRUSTED_HOSTS: '["localhost","127.0.0.1","testserver"]'
 
     steps:
       - uses: actions/checkout@v4

@@ -25,17 +25,50 @@ class Settings(BaseSettings):
     # ── JWT / 인증 ────────────────────────────────────────
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 14
+    REFRESH_COOKIE_NAME: str = "refresh_token"
+    REFRESH_COOKIE_PATH: str = "/api/v1/auth"
+    EMAIL_VERIFICATION_CODE_TTL_SECONDS: int = 300
+    EMAIL_VERIFIED_TTL_SECONDS: int = 1800
+
+    @property
+    def REFRESH_TOKEN_TTL_SECONDS(self) -> int:
+        return self.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
 
     # ── CORS ─────────────────────────────────────────────
-    ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
+    ALLOWED_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "https://gembti.cloud",
+        "https://www.gembti.cloud",
+    ]
+    ALLOWED_ORIGIN_REGEX: str = r"https://.*\.vercel\.app"
+    TRUSTED_HOSTS: list[str] = [
+        "localhost",
+        "127.0.0.1",
+        "gembti.cloud",
+        "www.gembti.cloud",
+    ]
+
+    # ── Rate Limit ───────────────────────────────────────
+    RATE_LIMIT: str = "200/minute"
 
     # ── OpenAI ───────────────────────────────────────────
     OPENAI_API_KEY: str
 
+    # ── AWS S3 ───────────────────────────────────────────
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_REGION: str = "ap-northeast-2"
+    AWS_S3_BUCKET_NAME: str = ""
+    AWS_S3_PRESIGNED_URL_EXPIRE: int = 3600  # seconds
+
     # ── Steam Web API ─────────────────────────────────────
     STEAM_API_KEY: str = ""
+    BACKEND_BASE_URL: str = "http://localhost:8000"
+    FRONTEND_BASE_URL: str = "http://localhost:3000"
+    STEAM_CALLBACK_PATH: str = "/steam/callback"
+    STEAM_SIGNUP_TOKEN_TTL_SECONDS: int = 600
 
     # ── 이메일 (fastapi-mail) ─────────────────────────────
     MAIL_USERNAME: str = ""

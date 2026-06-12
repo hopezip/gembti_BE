@@ -3,10 +3,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from app.auth.router import router as auth_router
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.middlewares import register_middlewares
 from app.core.redis import close_redis
+from app.game.router import router as game_router
+from app.recommend.router import router as recommend_router
+from app.steam.router import router as steam_router
+from app.survey.router import router as survey_router
 
 
 @asynccontextmanager
@@ -32,25 +37,44 @@ def create_app() -> FastAPI:
     async def health() -> JSONResponse:
         return JSONResponse({"status": "ok"})
 
-    # ── 라우터 등록 (각 모듈 완성 후 주석 해제) ──────────────
-    # from app.auth.router import router as auth_router
-    # from app.survey.router import router as survey_router
-    # from app.stat.router import router as stat_router
-    # from app.recommend.router import router as recommend_router
-    # from app.game.router import router as game_router
-    # from app.steam.router import router as steam_router
-    # from app.support.router import router as support_router
-    # from app.chat.router import router as chat_router
-
-    # API_PREFIX = "/api/v1"
-    # app.include_router(auth_router, prefix=API_PREFIX)
-    # app.include_router(survey_router, prefix=API_PREFIX)
+    API_PREFIX = "/api/v1"
+    app.include_router(auth_router, prefix=API_PREFIX)
+    app.include_router(survey_router, prefix=API_PREFIX)
     # app.include_router(stat_router, prefix=API_PREFIX)
-    # app.include_router(recommend_router, prefix=API_PREFIX)
-    # app.include_router(game_router, prefix=API_PREFIX)
-    # app.include_router(steam_router, prefix=API_PREFIX)
-    # app.include_router(support_router, prefix=API_PREFIX)
-    # app.include_router(chat_router, prefix=API_PREFIX)
+    app.include_router(recommend_router, prefix=API_PREFIX)
+    app.include_router(game_router, prefix=API_PREFIX)
+    app.include_router(steam_router, prefix=API_PREFIX)
+
+    def custom_openapi() -> dict:
+        if app.openapi_schema:
+            return app.openapi_schema
+        from fastapi.openapi.utils import get_openapi
+
+        schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
+        error_schema = {
+            "title": "ErrorResponse",
+            "type": "object",
+            "properties": {"error": {"title": "Error", "type": "string"}},
+            "required": ["error"],
+        }
+        components = schema.setdefault("components", {}).setdefault("schemas", {})
+        components["ErrorResponse"] = error_schema
+        components.pop("HTTPValidationError", None)
+        components.pop("ValidationError", None)
+        for path_item in schema.get("paths", {}).values():
+            for operation in path_item.values():
+                responses = operation.get("responses", {})
+                for code in ("422", "404", "400", "401", "403", "409", "500"):
+                    if code in responses:
+                        responses[code]["content"] = {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+                            }
+                        }
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = custom_openapi  # type: ignore[method-assign]
 
     return app
 
