@@ -95,12 +95,14 @@ async def test_upsert_game_created_at_preserved(db_session: AsyncSession):
     await db_session.commit()
 
     game_before = await _get_by_app_id(db_session, 99903)
+    assert game_before is not None
     created_at = game_before.created_at
 
     await upsert_game(db_session, _game_data(app_id=99903, title="After"))
     await db_session.commit()
 
     game_after = await _get_by_app_id(db_session, 99903)
+    assert game_after is not None
     assert game_after.created_at == created_at
 
 
@@ -114,7 +116,8 @@ async def test_upsert_game_update_fields(db_session: AsyncSession):
     await db_session.commit()
 
     game = await _get_by_app_id(db_session, 99904)
-    assert float(game.review_score) == 95.0
+    assert game is not None
+    assert game.review_score == 95.0
     assert game.current_players == 9999
 
 

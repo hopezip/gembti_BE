@@ -51,7 +51,7 @@ def test_calculate_user_stats_groups_answers_by_stat_axis() -> None:
         FakeSurveyQuestion(id=3, stat_axis=FakeStatAxis.STRATEGY),
         FakeSurveyQuestion(id=4, stat_axis=FakeStatAxis.HEALING),
     ]
-    answers_by_question_id = {
+    answers_by_question_id: dict[int, int | None] = {
         1: 2,
         2: 0,
         3: -2,
