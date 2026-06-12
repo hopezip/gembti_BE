@@ -1,7 +1,8 @@
 name: Prod Deploy
 
 on:
-  workflow_dispatch:  # 수동 실행 전용 (자동 배포 비활성화)
+  push:
+    branches: [main]
 
 jobs:
   prod_deploy:
