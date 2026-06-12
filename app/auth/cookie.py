@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import Response
 
 from app.core.config import settings
@@ -13,7 +15,7 @@ def _get_refresh_cookie_domain() -> str | None:
     return None
 
 
-def _get_refresh_cookie_samesite() -> str:
+def _get_refresh_cookie_samesite() -> Literal["lax", "none"]:
     if _is_production():
         return "none"
     return "lax"
