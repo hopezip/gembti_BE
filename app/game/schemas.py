@@ -4,6 +4,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel
 
+from app.core.recommendation.schemas import HomeGameItem  # noqa: TC001
 
 class SortOption(StrEnum):
     POPULAR = "popular"
@@ -65,18 +66,6 @@ class SearchResponse(BaseModel):
     data: SearchDataResponse
 
 
-# ── 홈 공통 카드 ──────────────────────────────────────────────────────────────
-
-
-class HomeGameItem(BaseModel):
-    game_id: int
-    title: str
-    thumbnail_url: str | None
-    genres: list[str]
-    rating: float | None
-    is_new: bool = False
-
-
 class TrendingGamesResponse(BaseModel):
     status: str = "SUCCESS"
     data: list[HomeGameItem]
@@ -88,7 +77,6 @@ class NewReleasesResponse(BaseModel):
 
 
 # ── 게임 상세 ──────────────────────────────────────────────────────────────────
-
 
 class SystemSpecResponse(BaseModel):
     os: str = ""
