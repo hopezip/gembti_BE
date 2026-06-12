@@ -1,0 +1,81 @@
+name: Dev Deploy
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  dev_deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Docker Hub 로그인
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Docker Buildx 세팅
+        uses: docker/setup-buildx-action@v3
+
+      - name: 앱 이미지 빌드 & 푸시
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/gembti-be:dev
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/gembti-be:cache
+          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/gembti-be:cache,mode=max
+
+      - name: Nginx 이미지 빌드 & 푸시
+        uses: docker/build-push-action@v5
+        with:
+          context: ./nginx
+          file: ./nginx/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/gembti-nginx:dev
+
+      - name: GitHub Actions IP 조회
+        id: ip
+        uses: haythem/public-ip@v1.3
+
+      - name: AWS 자격증명 설정
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+
+      - name: Security Group에 IP 추가
+        run: |
+          aws ec2 authorize-security-group-ingress \
+            --group-id ${{ secrets.AWS_SG_ID }} \
+            --protocol tcp --port 22 \
+            --cidr ${{ steps.ip.outputs.ipv4 }}/32
+
+      - name: EC2 SSH 배포
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_DEV_HOST }}
+          username: ${{ secrets.EC2_DEV_USER }}
+          key: ${{ secrets.EC2_DEV_SSH_KEY }}
+          script: |
+            cd ~/gembti_BE
+            git pull origin develop
+            docker compose down
+            docker compose pull
+            docker compose up -d --build
+            docker image prune -af
+
+      - name: Security Group에서 IP 제거
+        if: always()
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id ${{ secrets.AWS_SG_ID }} \
+            --protocol tcp --port 22 \
+            --cidr ${{ steps.ip.outputs.ipv4 }}/32 \
+            --region ap-northeast-2
