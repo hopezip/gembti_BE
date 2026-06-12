@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 from app.core.exceptions import NotFoundException
 from app.core.recommendation.vectorizer import game_to_vector
+from app.core.recommendation.schemas import _rating_from_score
 from app.game.client import fetch_app_details, fetch_app_reviews, fetch_current_players
 from app.game.repository import upsert_game
 
@@ -367,13 +368,6 @@ def _derive_play_modes(categories: list[str]) -> list[str]:
             seen.add(mode)
             modes.append(mode)
     return modes
-
-
-def _rating_from_score(review_score: float | None) -> float | None:
-    """review_score(0~100%) → 5점 척도."""
-    if review_score is None:
-        return None
-    return round(float(review_score) / 20, 1)
 
 
 class _HTMLTextExtractor(HTMLParser):
