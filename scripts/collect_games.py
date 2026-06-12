@@ -122,7 +122,8 @@ async def _load_app_ids(ids_file: str | None) -> list[int]:
             err=True,
         )
         sys.exit(1)
-    click.echo(f"   → {len(ids):,}개 앱 조회 완료", err=True)
+    ids.sort(reverse=True)
+    click.echo(f"   → {len(ids):,}개 앱 조회 완료 (최신순)", err=True)
     return ids
 
 
