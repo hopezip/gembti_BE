@@ -50,6 +50,7 @@ gembti_BE/
 │   │   ├── dependencies.py  # get_db(), get_current_user_id()
 │   │   ├── exceptions.py    # 공통 예외 클래스 + 핸들러
 │   │   ├── middlewares.py   # CORS + slowapi 레이트 리밋
+│   │   ├── model_registry.py# ORM 모델 일괄 등록
 │   │   └── celery_app.py    # Celery 인스턴스
 │   ├── auth/                # 회원가입, 로그인, Steam 연동
 │   ├── survey/              # 설문조사
@@ -57,10 +58,7 @@ gembti_BE/
 │   ├── recommend/           # 게임 추천
 │   ├── game/                # 게임 정보
 │   ├── steam/               # Steam 데이터 동기화
-│   ├── support/             # 고객센터 챗봇
-│   ├── chat/                # 설문 챗봇
-│   ├── chat_common/         # 챗봇 공통
-│   └── common/              # 공통 유틸
+│   └── chat/                # 챗봇
 ├── alembic/
 │   ├── env.py               # DB URL 자동 주입, 모델 import
 │   ├── script.py.mako       # 마이그레이션 파일 템플릿
@@ -69,20 +67,18 @@ gembti_BE/
 │   ├── Dockerfile           # Nginx 독립 이미지
 │   └── conf.d/default.conf  # 리버스 프록시 설정
 ├── scripts/
+│   ├── collect_games.py     # Steam 게임 대량 수집 스크립트
 │   └── format.sh            # 코드 포매터 일괄 실행
 ├── tests/
 │   ├── conftest.py          # DB / 클라이언트 픽스처
-│   └── core/                # core 레이어 단위 테스트
-│       ├── test_config.py
-│       ├── test_security.py
-│       ├── test_exceptions.py
-│       ├── test_dependencies.py
-│       └── test_health.py
-├── docs/help/support/       # 고객센터 RAG 도움말 문서
+│   ├── auth/
+│   ├── core/
+│   ├── game/
+│   ├── stat/
+│   └── steam/
 ├── .github/workflows/
-│   ├── ci.yml               # lint + test (모든 브랜치 push / PR)
-│   ├── cd_dev.yml           # 개발 서버 배포 (수동 실행 전용)
-│   └── cd_prod.yml          # 운영 서버 배포 (수동 실행 전용)
+│   ├── ci.yml               # lint + test (main / develop PR 시)
+│   └── cd_prod.yml          # 운영 서버 배포 (main push 자동 실행)
 ├── conftest.py              # 테스트 환경변수 주입 (루트)
 ├── Dockerfile               # 멀티스테이지 빌드
 ├── docker-compose.yml       # 운영 공통 스택
@@ -217,7 +213,7 @@ uv run alembic upgrade head
 uv run alembic downgrade -1
 ```
 
-> 새 모델 추가 시 `alembic/env.py`의 모델 import 주석을 해제해야 자동 감지됩니다.
+> 새 모델 추가 시 `app/core/model_registry.py`에 import를 추가해야 자동 감지됩니다.
 
 ---
 
@@ -248,17 +244,14 @@ uv run pytest --cov=app --cov-report=html
 
 ### CI (`ci.yml`)
 
-모든 브랜치 push 및 `main` / `develop` PR 시 자동 실행
+`main` / `develop` 브랜치 대상 PR 시 자동 실행
 
 ```
 lint (ruff → isort → black → mypy) → test (pytest + codecov)
 ```
 
-### CD
+### CD (`cd_prod.yml`)
 
-| 워크플로우 | 대상 | 트리거 |
-|---|---|---|
-| `cd_dev.yml` | 개발 EC2 | 수동 실행 (`workflow_dispatch`) |
-| `cd_prod.yml` | 운영 EC2 | 수동 실행 (`workflow_dispatch`) |
+`main` 브랜치 push(develop → main 머지) 시 자동 실행
 
 배포 흐름: Docker Hub 이미지 빌드 & 푸시 → EC2 SSH → 컨테이너 교체
