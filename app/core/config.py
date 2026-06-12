@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     REDIS_AUTH_URL: str | None = None
     REDIS_EMAIL_URL: str | None = None
     REDIS_STEAM_URL: str | None = None
+    SUPPORT_CHAT_SESSION_TTL_SECONDS: int = 900
 
     # ── JWT / 인증 ────────────────────────────────────────
     SECRET_KEY: str
