@@ -23,7 +23,7 @@ def normalize_score(raw_score: int, question_count: int) -> int:
 
 def calculate_user_stats(
     questions: list[Any],
-    answers_by_question_id: dict[int, int],
+    answers_by_question_id: dict[int, int | None],
 ) -> dict[str, int]:
     raw_scores = dict.fromkeys(AXES, 0)
     counts = dict.fromkeys(AXES, 0)
@@ -31,6 +31,9 @@ def calculate_user_stats(
     question_by_id = {question.id: question for question in questions}
 
     for question_id, answer_score in answers_by_question_id.items():
+        if answer_score is None:
+            continue
+
         question = question_by_id.get(question_id)
         if question is None:
             raise ValueError("존재하지 않는 설문 문항 응답입니다.")

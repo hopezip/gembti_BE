@@ -1,4 +1,5 @@
 # user_stats 저장/조회
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.stat.models import StatSourceType, SurveyMode, UserStats
@@ -25,3 +26,16 @@ async def create_user_stats(
     db.add(user_stats)
     await db.flush()
     return user_stats
+
+
+async def get_latest_user_stats(
+    db: AsyncSession,
+    user_id: int,
+) -> UserStats | None:
+    result = await db.execute(
+        select(UserStats)
+        .where(UserStats.user_id == user_id)
+        .order_by(UserStats.created_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
