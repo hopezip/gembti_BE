@@ -18,7 +18,12 @@ ANSWER_SCORE_MAP = {
 def convert_answer_to_score(answer: int | None) -> int | None:
     if answer is None:
         return None
-    return ANSWER_SCORE_MAP[answer]
+
+    score = ANSWER_SCORE_MAP.get(answer)
+    if score is None:
+        raise BadRequestException("유효하지 않은 설문 응답 값입니다.")
+
+    return score
 
 
 async def list_survey_questions(db: AsyncSession):
