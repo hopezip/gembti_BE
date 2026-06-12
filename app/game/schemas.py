@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from app.core.recommendation.schemas import HomeGameItem  # noqa: TC001
 
+
 class SortOption(StrEnum):
     POPULAR = "popular"
     RATING = "rating"
@@ -77,6 +78,7 @@ class NewReleasesResponse(BaseModel):
 
 
 # ── 게임 상세 ──────────────────────────────────────────────────────────────────
+
 
 class SystemSpecResponse(BaseModel):
     os: str = ""

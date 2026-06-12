@@ -207,7 +207,7 @@ def test_validate_embedding_vector_rejects_wrong_dimensions() -> None:
 
 def test_validate_embedding_vector_rejects_non_numeric_values() -> None:
     with pytest.raises(ValueError, match="numeric"):
-        validate_embedding_vector(["x"] * CHAT_CHUNK_EMBEDDING_DIMENSIONS)
+        validate_embedding_vector(["x"] * CHAT_CHUNK_EMBEDDING_DIMENSIONS)  # type: ignore[list-item]
 
 
 def test_validate_embedding_vector_rejects_non_finite_values() -> None:
