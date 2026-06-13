@@ -9,8 +9,11 @@ from sqlalchemy import select
 from app.game.models import Game
 from app.recommend.models import RecommendationItem, RecommendationSourceType
 from app.stat.models import UserStats
+from app.steam.models import UserLibraryGame
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -27,9 +30,19 @@ async def get_latest_user_stats(db: AsyncSession, user_id: int) -> UserStats | N
 async def get_recommendable_games(
     db: AsyncSession,
     candidate_limit: int = 500,
+    excluded_app_ids: Sequence[int] | None = None,
 ) -> list[Game]:
+    query = select(Game).where(Game.is_active.is_(True))
+    if excluded_app_ids:
+        query = query.where(Game.app_id.not_in(excluded_app_ids))
+
+    result = await db.execute(query.order_by(Game.id).limit(candidate_limit))
+    return list(result.scalars().all())
+
+
+async def get_user_library_steam_app_ids(db: AsyncSession, user_id: int) -> list[int]:
     result = await db.execute(
-        select(Game).where(Game.is_active.is_(True)).order_by(Game.id).limit(candidate_limit)
+        select(UserLibraryGame.steam_app_id).where(UserLibraryGame.user_id == user_id)
     )
     return list(result.scalars().all())
 

@@ -25,8 +25,6 @@ class SignupRequest(BaseModel):
     gender: Gender | None = None
     birth_date: date | None = None
     age_confirmed: bool
-    terms_agreed: bool | None = None
-    privacy_agreed: bool | None = None
 
     @field_validator("gender", mode="before")
     @classmethod

@@ -72,9 +72,10 @@ async def steam_auth_callback_api(
     "/steam/link",
     response_model=SteamLinkResponse,
     responses={
-        400: _err("이미 연동된 Steam 계정"),
+        400: _err("Steam ID 형식이 올바르지 않습니다."),
         401: _err("인증 실패"),
-        403: _err("접근 권한이 없습니다."),
+        404: _err("사용자를 찾을 수 없습니다."),
+        409: _err("이미 다른 사용자에게 연동된 Steam 계정입니다."),
     },
 )
 async def steam_link_api(
