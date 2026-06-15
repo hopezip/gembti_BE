@@ -65,7 +65,7 @@ jobs:
           key: ${{ secrets.EC2_DEV_SSH_KEY }}
           script: |
             cd ~/gembti_BE
-            git pull origin develop
+            git pull origin main
             docker compose down
             docker compose pull
             docker compose up -d --build
