@@ -126,6 +126,7 @@ class GameDetailDataResponse(BaseModel):
     korean_sub: bool
     age_rating: str
     on_sale: bool
+    steam_url: str | None
     developer_games: list[GameSummaryResponse]
 
 

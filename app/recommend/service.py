@@ -14,7 +14,16 @@ from app.recommend.repository import (
     get_user_library_steam_app_ids,
     save_recommendation_items,
 )
-from app.recommend.schemas import RecommendationGenerateResponse, RecommendedGameResponse
+from app.recommend.schemas import (
+    DiscountedRecommendationsResponse,
+    DiscountedRecommendedGameResponse,
+    HighlyRatedRecommendationsResponse,
+    HighlyRatedRecommendedGameResponse,
+    PopularRecommendationsResponse,
+    PopularRecommendedGameResponse,
+    RecommendationGenerateResponse,
+    RecommendedGameResponse,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -104,3 +113,146 @@ async def get_latest_recommendations(
     ]
 
     return RecommendationGenerateResponse(games=response_games)
+
+
+def calculate_original_price(
+    price_krw: int | None,
+    discount_percent: int,
+) -> int | None:
+    if price_krw is None:
+        return None
+
+    if discount_percent <= 0:
+        return price_krw
+
+    rate = 1 - (discount_percent / 100)
+    if rate <= 0:
+        return price_krw
+
+    return round(price_krw / rate)
+
+
+async def get_discounted_recommendations(
+    db: AsyncSession,
+    user_id: int,
+    limit: int = 12,
+) -> DiscountedRecommendationsResponse:
+    recommendation_items = await get_latest_recommendation_items(db, user_id)
+
+    if not recommendation_items:
+        raise NotFoundException("추천 기록 없음")
+
+    discounted_items = [item for item in recommendation_items if item.game.discount_percent > 0]
+
+    if not discounted_items:
+        raise NotFoundException("세일 중인 맞춤 게임 없음")
+
+    response_games = [
+        DiscountedRecommendedGameResponse(
+            recommendation_item_id=item.id,
+            game_id=item.game.id,
+            title=item.game.title,
+            image_url=item.game.image_url,
+            genres=list(item.game.genres),
+            price_krw=item.game.price_krw,
+            original_price_krw=calculate_original_price(
+                item.game.price_krw,
+                item.game.discount_percent,
+            ),
+            discount_percent=item.game.discount_percent,
+            rating=_rating_from_score(item.game.review_score),
+            similarity_score=float(item.similarity_score),
+            similarity_rank=item.similarity_rank,
+        )
+        for item in discounted_items[:limit]
+    ]
+
+    return DiscountedRecommendationsResponse(games=response_games)
+
+
+async def get_highly_rated_recommendations(
+    db: AsyncSession,
+    user_id: int,
+    limit: int = 12,
+    min_score: float = 80,
+) -> HighlyRatedRecommendationsResponse:
+    recommendation_items = await get_latest_recommendation_items(db, user_id)
+
+    if not recommendation_items:
+        raise NotFoundException("추천 기록 없음")
+
+    highly_rated_items = [
+        item
+        for item in recommendation_items
+        if item.game.review_score is not None and item.game.review_score >= min_score
+    ]
+
+    if not highly_rated_items:
+        raise NotFoundException("평가가 좋은 맞춤 게임 없음")
+
+    highly_rated_items = sorted(
+        highly_rated_items,
+        key=lambda item: (
+            item.game.review_score or 0,
+            -item.similarity_rank,
+        ),
+        reverse=True,
+    )
+
+    response_games = [
+        HighlyRatedRecommendedGameResponse(
+            recommendation_item_id=item.id,
+            game_id=item.game.id,
+            title=item.game.title,
+            image_url=item.game.image_url,
+            genres=list(item.game.genres),
+            rating=_rating_from_score(item.game.review_score),
+            review_count=item.game.review_count,
+            similarity_score=float(item.similarity_score),
+            similarity_rank=item.similarity_rank,
+        )
+        for item in highly_rated_items[:limit]
+    ]
+
+    return HighlyRatedRecommendationsResponse(games=response_games)
+
+
+async def get_popular_recommendations(
+    db: AsyncSession,
+    user_id: int,
+    limit: int = 12,
+) -> PopularRecommendationsResponse:
+    recommendation_items = await get_latest_recommendation_items(db, user_id)
+
+    if not recommendation_items:
+        raise NotFoundException("추천 기록 없음")
+
+    popular_items = [item for item in recommendation_items if item.game.current_players is not None]
+
+    if not popular_items:
+        raise NotFoundException("맞춤 인기 게임 없음")
+
+    popular_items = sorted(
+        popular_items,
+        key=lambda item: item.game.current_players or 0,
+        reverse=True,
+    )
+
+    response_games = [
+        PopularRecommendedGameResponse(
+            recommendation_item_id=item.id,
+            rank=index,
+            game_id=item.game.id,
+            title=item.game.title,
+            image_url=item.game.image_url,
+            genres=list(item.game.genres),
+            current_players=item.game.current_players or 0,
+            rating=_rating_from_score(item.game.review_score),
+            current_players_updated_at=item.game.current_players_updated_at,
+            similarity_score=float(item.similarity_score),
+            similarity_rank=item.similarity_rank,
+        )
+        for index, item in enumerate(popular_items[:limit], start=1)
+    ]
+
+    return PopularRecommendationsResponse(games=response_games)
