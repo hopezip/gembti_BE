@@ -28,7 +28,7 @@ class SteamCompleteSignupRequest(BaseModel):
     signup_token: str
     email: EmailStr
     nickname: str = Field(min_length=2, max_length=8, pattern=r"^[가-힣A-Za-z0-9]+$")
-    age_agreed: bool
+    age_confirmed: bool
     gender: Gender | None = None
     birth_date: date | None = None
 
@@ -40,8 +40,8 @@ class SteamCompleteSignupRequest(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def validate_age_agreement(self) -> "SteamCompleteSignupRequest":
-        if not self.age_agreed:
+    def validate_age_confirmation(self) -> "SteamCompleteSignupRequest":
+        if not self.age_confirmed:
             raise ValueError("만 15세 이상만 가입할 수 있습니다.")
         return self
 

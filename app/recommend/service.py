@@ -9,6 +9,7 @@ from app.core.recommendation.vectorizer import user_stats_to_vector
 from app.recommend.repository import (
     get_latest_user_stats,
     get_recommendable_games,
+    get_user_library_steam_app_ids,
     save_recommendation_items,
 )
 from app.recommend.schemas import RecommendationGenerateResponse, RecommendedGameResponse
@@ -26,7 +27,8 @@ async def generate_recommendations(
     if user_stats is None:
         raise BadRequestException("성향 스탯이 없습니다. 설문을 먼저 완료해 주세요.")
 
-    games = await get_recommendable_games(db)
+    owned_steam_app_ids = await get_user_library_steam_app_ids(db, user_id)
+    games = await get_recommendable_games(db, excluded_app_ids=owned_steam_app_ids)
     if not games:
         raise BadRequestException("추천 가능한 게임 데이터가 없습니다.")
 
