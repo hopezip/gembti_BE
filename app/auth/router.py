@@ -46,6 +46,7 @@ _err = lambda msg: {"content": {"application/json": {"example": {"error": msg}}}
     responses={
         400: _err("잘못된 이메일 형식"),
         409: _err("이미 가입된 이메일입니다."),
+        429: _err("요청 횟수가 너무 많습니다. 잠시 후 다시 시도해주세요."),
     },
 )
 async def send_email_code_api(
@@ -105,7 +106,7 @@ async def signup_api(
 
 @router.post(
     "/login",
-    response_model=AuthResponse,
+    response_model=AccessTokenResponse,
     responses={
         401: _err("이메일 또는 비밀번호가 일치하지 않습니다."),
         403: _err("사용할 수 없는 계정입니다."),
@@ -116,11 +117,19 @@ async def login_api(
     request: LoginRequest,
     response: Response,
     db: AsyncSession = Depends(get_db),
-) -> AuthResponse:
+) -> AccessTokenResponse:
     return await login(db, response, request)
 
 
-@router.post("/password/reset", response_model=MessageResponse)
+@router.post(
+    "/password/reset",
+    response_model=MessageResponse,
+    responses={
+        400: _err("가입되지 않은 이메일입니다."),
+        403: _err("이메일 인증이 필요합니다."),
+        422: _err("요청 형식이 올바르지 않습니다."),
+    },
+)
 async def reset_password_api(
     request: PasswordResetRequest,
     db: AsyncSession = Depends(get_db),
@@ -142,6 +151,7 @@ async def _refresh_api(
 @router.post(
     "/token/refresh",
     response_model=AccessTokenResponse,
+    include_in_schema=False,
     responses={
         401: _err("Refresh Token이 없거나 유효하지 않습니다."),
     },

@@ -11,8 +11,6 @@ def valid_signup_data() -> dict[str, object]:
         "password_confirm": "Password!1",
         "nickname": "테스터1",
         "age_confirmed": True,
-        "terms_agreed": True,
-        "privacy_agreed": True,
     }
 
 
