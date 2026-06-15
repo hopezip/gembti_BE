@@ -70,6 +70,17 @@ async def test_verify_and_consume_email(fake_redis: FakeRedis) -> None:
 
 
 @pytest.mark.asyncio
+async def test_previous_verification_code_is_accepted_after_resend(fake_redis: FakeRedis) -> None:
+    email = "test@example.com"
+    await email_verification_store.save_verification_code(email, PURPOSE, "111111")
+    await email_verification_store.save_verification_code(email, PURPOSE, "222222")
+
+    assert await email_verification_store.verify_email_code(email, PURPOSE, "111111") is True
+    assert email_verification_store.code_key(email, PURPOSE) not in fake_redis.values
+    assert email_verification_store.previous_code_key(email, PURPOSE) not in fake_redis.values
+
+
+@pytest.mark.asyncio
 async def test_wrong_verification_code_is_rejected(fake_redis: FakeRedis) -> None:
     email = "test@example.com"
     await email_verification_store.save_verification_code(email, PURPOSE, "123456")

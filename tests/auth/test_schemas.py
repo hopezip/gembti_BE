@@ -1,7 +1,14 @@
 from pydantic import ValidationError
 import pytest
 
-from app.auth.schemas import PasswordResetRequest, SignupRequest
+from app.auth.models import EmailVerificationPurpose, Gender
+from app.auth.schemas import (
+    EmailCodeSendRequest,
+    EmailCodeVerifyRequest,
+    PasswordResetRequest,
+    SignupRequest,
+)
+from app.steam.schemas import SteamCompleteSignupRequest
 
 
 def valid_signup_data() -> dict[str, object]:
@@ -17,6 +24,61 @@ def valid_signup_data() -> dict[str, object]:
 def test_signup_schema_accepts_valid_request() -> None:
     request = SignupRequest.model_validate(valid_signup_data())
     assert request.email == "test@example.com"
+
+
+def test_email_code_schema_accepts_lowercase_purpose() -> None:
+    request = EmailCodeSendRequest.model_validate(
+        {
+            "email": "test@example.com",
+            "purpose": "password_reset",
+        }
+    )
+
+    assert request.purpose == EmailVerificationPurpose.PASSWORD_RESET
+
+
+def test_email_verify_schema_normalizes_code_separators() -> None:
+    request = EmailCodeVerifyRequest.model_validate(
+        {
+            "email": "test@example.com",
+            "purpose": "signup",
+            "code": "1 2 3-4 5 6",
+        }
+    )
+
+    assert request.purpose == EmailVerificationPurpose.SIGNUP
+    assert request.code == "123456"
+
+
+def test_signup_schema_accepts_frontend_display_values() -> None:
+    request = SignupRequest.model_validate(
+        {
+            **valid_signup_data(),
+            "gender": "남성",
+            "birth_date": "2000. 01. 15.",
+        }
+    )
+
+    assert request.gender == Gender.MALE
+    assert request.birth_date is not None
+    assert request.birth_date.isoformat() == "2000-01-15"
+
+
+def test_steam_complete_signup_schema_accepts_frontend_display_values() -> None:
+    request = SteamCompleteSignupRequest.model_validate(
+        {
+            "signup_token": "steam_signup_token",
+            "email": "steam@example.com",
+            "nickname": "스팀유저",
+            "age_confirmed": True,
+            "gender": "여성",
+            "birth_date": "2000. 1. 5.",
+        }
+    )
+
+    assert request.gender == Gender.FEMALE
+    assert request.birth_date is not None
+    assert request.birth_date.isoformat() == "2000-01-05"
 
 
 @pytest.mark.parametrize(

@@ -3,7 +3,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app.auth.models import Gender
-from app.auth.schemas import AuthUserResponse
+from app.auth.schemas import AuthUserResponse, normalize_birth_date_value, normalize_gender_value
 from app.steam.models import SteamSyncStatus
 
 
@@ -35,9 +35,12 @@ class SteamCompleteSignupRequest(BaseModel):
     @field_validator("gender", mode="before")
     @classmethod
     def normalize_gender(cls, value: object) -> object:
-        if isinstance(value, str):
-            return value.lower()
-        return value
+        return normalize_gender_value(value)
+
+    @field_validator("birth_date", mode="before")
+    @classmethod
+    def normalize_birth_date(cls, value: object) -> object:
+        return normalize_birth_date_value(value)
 
     @model_validator(mode="after")
     def validate_age_confirmation(self) -> "SteamCompleteSignupRequest":
