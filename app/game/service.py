@@ -609,6 +609,7 @@ async def get_game_detail_service(
             korean_sub=game.is_korean_supported,
             age_rating=age_rating,
             on_sale=on_sale,
+            steam_url=game.steam_url,
             developer_games=[GameSummaryResponse(**_game_to_summary(g)) for g in dev_games],
         )
     )
