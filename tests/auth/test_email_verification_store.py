@@ -5,6 +5,7 @@ import pytest
 from app.auth import email_verification_store
 from app.auth.models import EmailVerificationPurpose
 from app.core.config import settings
+from app.core.enums import RedisPurpose
 
 PURPOSE = EmailVerificationPurpose.SIGNUP
 
@@ -34,12 +35,16 @@ class FakeRedis:
 @pytest.fixture
 def fake_redis(monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeRedis]:
     redis = FakeRedis()
+    purposes: list[RedisPurpose] = []
 
-    async def get_fake_redis() -> FakeRedis:
+    async def get_fake_redis(purpose: RedisPurpose) -> FakeRedis:
+        purposes.append(purpose)
         return redis
 
     monkeypatch.setattr(email_verification_store, "get_redis", get_fake_redis)
     yield redis
+    assert purposes
+    assert all(purpose == RedisPurpose.EMAIL for purpose in purposes)
 
 
 def test_email_keys_are_normalized() -> None:
@@ -67,6 +72,17 @@ async def test_verify_and_consume_email(fake_redis: FakeRedis) -> None:
     assert email_verification_store.code_key(email, PURPOSE) not in fake_redis.values
     assert await email_verification_store.consume_verified_email(email, PURPOSE) is True
     assert await email_verification_store.consume_verified_email(email, PURPOSE) is False
+
+
+@pytest.mark.asyncio
+async def test_previous_verification_code_is_accepted_after_resend(fake_redis: FakeRedis) -> None:
+    email = "test@example.com"
+    await email_verification_store.save_verification_code(email, PURPOSE, "111111")
+    await email_verification_store.save_verification_code(email, PURPOSE, "222222")
+
+    assert await email_verification_store.verify_email_code(email, PURPOSE, "111111") is True
+    assert email_verification_store.code_key(email, PURPOSE) not in fake_redis.values
+    assert email_verification_store.previous_code_key(email, PURPOSE) not in fake_redis.values
 
 
 @pytest.mark.asyncio

@@ -3,6 +3,7 @@ from typing import Any, cast
 from jose import JWTError
 
 from app.core.config import settings
+from app.core.enums import RedisPurpose
 from app.core.redis import get_redis
 from app.core.security import decode_token
 
@@ -28,7 +29,7 @@ async def save_refresh_token(user_id: int, refresh_token: str, provider: str) ->
     if not isinstance(jti, str) or subject != str(user_id):
         raise ValueError("Refresh Token 정보가 올바르지 않습니다.")
 
-    redis = cast("Any", await get_redis())
+    redis = cast("Any", await get_redis(RedisPurpose.AUTH))
     ttl = settings.REFRESH_TOKEN_TTL_SECONDS
 
     await redis.hset(
@@ -61,7 +62,7 @@ async def validate_refresh_token(refresh_token: str) -> int | None:
     if not isinstance(jti, str) or not isinstance(subject, str):
         return None
 
-    redis = cast("Any", await get_redis())
+    redis = cast("Any", await get_redis(RedisPurpose.AUTH))
     user_id = await redis.hget(refresh_key(jti), "user_id")
     if user_id is None or user_id != subject:
         return None
@@ -78,7 +79,7 @@ async def delete_refresh_token(refresh_token: str, user_id: int | None = None) -
     if not isinstance(jti, str):
         return
 
-    redis = cast("Any", await get_redis())
+    redis = cast("Any", await get_redis(RedisPurpose.AUTH))
     await redis.delete(refresh_key(jti))
 
     if user_id is not None:
@@ -86,7 +87,7 @@ async def delete_refresh_token(refresh_token: str, user_id: int | None = None) -
 
 
 async def delete_all_refresh_tokens_for_user(user_id: int) -> None:
-    redis = cast("Any", await get_redis())
+    redis = cast("Any", await get_redis(RedisPurpose.AUTH))
     user_key = user_refresh_set_key(user_id)
     token_jtis = await redis.smembers(user_key)
 
