@@ -105,7 +105,9 @@ def _parse_game_data(
         release_date = _parse_release_date(rd["date"])
 
     required_age = int(data.get("required_age") or 0)
-    is_active = required_age < 18
+    _adult_keywords = ("hentai", "eroge", "18+", "xxx", "adult only")
+    _title_lower = (data.get("name") or "").lower()
+    is_active = required_age < 18 and not any(kw in _title_lower for kw in _adult_keywords)
 
     # 리뷰 통계: 긍정 비율(0~100) + 전체 수
     review_score = None
