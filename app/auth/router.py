@@ -154,6 +154,7 @@ async def _refresh_api(
     include_in_schema=False,
     responses={
         401: _err("Refresh Token이 없거나 유효하지 않습니다."),
+        403: _err("사용할 수 없는 계정입니다."),
     },
 )
 async def refresh_token_api(
@@ -169,6 +170,7 @@ async def refresh_token_api(
     response_model=AccessTokenResponse,
     responses={
         401: _err("Refresh Token이 없거나 유효하지 않습니다."),
+        403: _err("사용할 수 없는 계정입니다."),
     },
 )
 async def refresh_api(
@@ -183,7 +185,9 @@ async def refresh_api(
     "/logout",
     response_model=MessageResponse,
     responses={
-        401: _err("인증 실패"),
+        400: _err("잘못된 요청입니다."),
+        409: _err("이미 로그아웃된 토큰입니다."),
+        422: _err("요청 형식이 올바르지 않습니다."),
     },
 )
 async def logout_api(
@@ -233,12 +237,13 @@ async def me_api(
 
 
 @router.delete(
-    "/me",
+    "/withdrawal",
     response_model=WithdrawResponse,
     responses={
         400: _err("비밀번호가 일치하지 않습니다."),
         401: _err("인증 실패"),
         403: _err("탈퇴 처리할 수 없는 계정입니다."),
+        422: _err("요청 형식이 올바르지 않습니다."),
     },
 )
 async def withdraw_me_api(
