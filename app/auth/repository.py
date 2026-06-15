@@ -6,7 +6,9 @@ from sqlalchemy.orm import selectinload
 
 from app.auth.models import User, UserWithdrawalRequest, UserWithdrawalStatus
 from app.core.enums import UserStatus
+from app.game.models import Game
 from app.stat.models import UserStats
+from app.steam.models import UserLibraryGame
 
 
 async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
@@ -33,6 +35,23 @@ async def get_user_by_nickname(db: AsyncSession, nickname: str) -> User | None:
 async def has_user_stats(db: AsyncSession, user_id: int) -> bool:
     result = await db.execute(select(UserStats.id).where(UserStats.user_id == user_id).limit(1))
     return result.scalar_one_or_none() is not None
+
+
+async def get_user_steam_library_rows(
+    db: AsyncSession,
+    user_id: int,
+) -> list[tuple[UserLibraryGame, Game | None]]:
+    result = await db.execute(
+        select(UserLibraryGame, Game)
+        .outerjoin(Game, Game.app_id == UserLibraryGame.steam_app_id)
+        .where(UserLibraryGame.user_id == user_id)
+        .order_by(
+            UserLibraryGame.playtime_minutes.desc(),
+            UserLibraryGame.last_played_at.desc().nullslast(),
+            UserLibraryGame.steam_app_id.asc(),
+        )
+    )
+    return [(library_game, game) for library_game, game in result.all()]
 
 
 async def save_user(db: AsyncSession, user: User) -> User:

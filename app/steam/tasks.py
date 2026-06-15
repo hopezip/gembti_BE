@@ -15,3 +15,8 @@ async def _sync_steam_library_async(user_id: int) -> dict[str, object]:
 @celery_app.task(name="app.steam.tasks.sync_steam_library")
 def sync_steam_library_task(user_id: int) -> dict[str, object]:
     return asyncio.run(_sync_steam_library_async(user_id))
+
+
+def enqueue_steam_library_sync(user_id: int) -> str:
+    task = sync_steam_library_task.delay(user_id)
+    return str(task.id)

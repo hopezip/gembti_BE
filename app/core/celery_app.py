@@ -30,5 +30,9 @@ celery_app.conf.update(
             "task": "game.refresh_all_games",
             "schedule": crontab(hour=3, minute=0, day_of_week=1),  # 매주 월요일 03:00 KST
         },
+        "cleanup-withdrawn-users-every-day": {
+            "task": "app.auth.tasks.cleanup_withdrawn_users",
+            "schedule": crontab(hour=4, minute=0),  # 매일 04:00 KST
+        },
     },
 )

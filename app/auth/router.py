@@ -11,7 +11,9 @@ from app.auth.schemas import (
     MessageResponse,
     NicknameCheckResponse,
     PasswordResetRequest,
+    ProfileUpdateRequest,
     SignupRequest,
+    UserActivityResponse,
     UserResponse,
     WithdrawRequest,
     WithdrawResponse,
@@ -19,12 +21,14 @@ from app.auth.schemas import (
 from app.auth.service import (
     check_nickname_available,
     get_me,
+    get_my_activity,
     login,
     logout_user,
     refresh_access_token_from_cookie,
     reset_password,
     send_email_code,
     signup,
+    update_me,
     verify_email,
     withdraw_user,
 )
@@ -185,6 +189,40 @@ async def me_api(
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
     return await get_me(db, user_id)
+
+
+@router.patch(
+    "/profile",
+    response_model=UserResponse,
+    responses={
+        400: _err("수정할 프로필 항목이 필요합니다."),
+        401: _err("인증 실패"),
+        404: _err("사용자를 찾을 수 없습니다."),
+        409: _err("이미 사용 중인 닉네임입니다."),
+        422: _err("요청 형식이 올바르지 않습니다."),
+    },
+)
+async def update_me_api(
+    request: ProfileUpdateRequest,
+    user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    return await update_me(db, user_id, request)
+
+
+@router.get(
+    "/me/activity",
+    response_model=UserActivityResponse,
+    responses={
+        401: _err("인증 실패"),
+        404: _err("사용자를 찾을 수 없습니다."),
+    },
+)
+async def my_activity_api(
+    user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> UserActivityResponse:
+    return await get_my_activity(db, user_id)
 
 
 @router.delete(

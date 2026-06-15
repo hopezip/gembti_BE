@@ -14,7 +14,6 @@ from app.auth.schemas import (
     LoginRequest,
     PasswordResetRequest,
     UserFlowStatus,
-    UserResponse,
     WithdrawRequest,
 )
 from app.core.enums import LoginProvider, UserStatus
@@ -31,6 +30,8 @@ def create_user() -> User:
             password_hash="hashed",
             nickname="tester",
             bio=None,
+            gender=None,
+            birth_date=None,
             login_provider=LoginProvider.EMAIL,
             status=UserStatus.ACTIVE,
             steam_linked=False,
@@ -178,26 +179,28 @@ async def test_get_me_returns_user_flow_status_for_completed_survey(
     async def has_user_stats(db: AsyncSession, user_id: int) -> bool:
         return True
 
+    async def get_user_steam_library_rows(db: AsyncSession, user_id: int):
+        return []
+
     monkeypatch.setattr(service, "get_user_by_id", get_user_by_id)
     monkeypatch.setattr(service, "has_user_stats", has_user_stats)
+    monkeypatch.setattr(
+        service,
+        "get_user_steam_library_rows",
+        get_user_steam_library_rows,
+    )
 
     result = await service.get_me(cast("AsyncSession", object()), user_id=7)
 
-    assert result == UserResponse(
-        id=7,
-        email="test@example.com",
-        nickname="tester",
-        bio=None,
-        login_provider=LoginProvider.EMAIL,
-        status=UserStatus.ACTIVE,
-        steam_linked=False,
-        steam_id_64=None,
-        steam_avatar_url=None,
-        steam_sync_status=None,
-        last_synced_at=None,
-        has_completed_survey=True,
-        user_flow_status=UserFlowStatus.READY,
-    )
+    assert result.id == 7
+    assert result.user_id == 7
+    assert result.email == "test@example.com"
+    assert result.nickname == "tester"
+    assert result.has_completed_survey is True
+    assert result.user_flow_status == UserFlowStatus.READY
+    assert result.steam_library.library_game_count == 0
+    assert result.steam_library.total_playtime_minutes == 0
+    assert result.steam_library.games == []
 
 
 @pytest.mark.asyncio
@@ -212,8 +215,16 @@ async def test_get_me_returns_needs_survey_without_stats(
     async def has_user_stats(db: AsyncSession, user_id: int) -> bool:
         return False
 
+    async def get_user_steam_library_rows(db: AsyncSession, user_id: int):
+        return []
+
     monkeypatch.setattr(service, "get_user_by_id", get_user_by_id)
     monkeypatch.setattr(service, "has_user_stats", has_user_stats)
+    monkeypatch.setattr(
+        service,
+        "get_user_steam_library_rows",
+        get_user_steam_library_rows,
+    )
 
     result = await service.get_me(cast("AsyncSession", object()), user_id=7)
 

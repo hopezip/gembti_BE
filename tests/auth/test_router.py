@@ -5,8 +5,6 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import router as auth_router
-from app.auth.schemas import UserResponse
-from app.core.enums import LoginProvider, UserStatus
 from app.main import app
 
 
@@ -23,21 +21,9 @@ async def test_refresh_without_cookie_returns_401() -> None:
 async def test_me_api_returns_service_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    user = UserResponse(
-        id=7,
-        email="test@example.com",
-        nickname="tester",
-        bio=None,
-        login_provider=LoginProvider.EMAIL,
-        status=UserStatus.ACTIVE,
-        steam_linked=False,
-        steam_id_64=None,
-        steam_avatar_url=None,
-        steam_sync_status=None,
-        last_synced_at=None,
-    )
+    user = object()
 
-    async def get_me(db: AsyncSession, user_id: int) -> UserResponse:
+    async def get_me(db: AsyncSession, user_id: int):
         return user
 
     monkeypatch.setattr(auth_router, "get_me", get_me)
