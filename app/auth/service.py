@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 from datetime import UTC, datetime, timedelta
 import secrets
+from typing import TYPE_CHECKING, cast
 
-from fastapi import Response
 from sqlalchemy import delete
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.cookie import delete_refresh_cookie, set_refresh_cookie
 from app.auth.email_sender import send_verification_email
@@ -31,6 +32,7 @@ from app.auth.repository import (
     get_user_by_email,
     get_user_by_id,
     get_user_by_nickname,
+    get_user_steam_library_rows,
     has_user_stats,
     save_user,
 )
@@ -42,7 +44,11 @@ from app.auth.schemas import (
     MessageResponse,
     NicknameCheckResponse,
     PasswordResetRequest,
+    ProfileUpdateRequest,
     SignupRequest,
+    SteamLibraryGameResponse,
+    SteamLibraryResponse,
+    UserActivityResponse,
     UserFlowStatus,
     UserResponse,
     WithdrawRequest,
@@ -64,6 +70,14 @@ from app.core.security import (
     verify_password,
 )
 from app.steam.models import SteamAccount, UserLibraryGame
+
+if TYPE_CHECKING:
+    from datetime import date
+
+    from fastapi import Response
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from app.game.models import Game
 
 WITHDRAWAL_GRACE_PERIOD_DAYS = 14
 
@@ -175,6 +189,133 @@ async def check_nickname_available(
     )
 
 
+async def get_me(
+    db: AsyncSession,
+    user_id: int,
+) -> UserResponse:
+    user = await get_user_by_id(db, user_id)
+    if user is None:
+        raise NotFoundException("사용자를 찾을 수 없습니다.")
+
+    steam_library = await build_steam_library_response(db, user.id)
+    has_completed_survey = await has_user_stats(db, user.id)
+
+    return UserResponse(
+        id=user.id,
+        user_id=user.id,
+        email=user.email,
+        nickname=user.nickname,
+        bio=user.bio,
+        gender=user.gender,
+        birth_date=cast("date | None", user.birth_date),
+        login_provider=user.login_provider,
+        status=user.status,
+        steam_linked=user.steam_linked,
+        steam_id_64=user.steam_id_64,
+        steam_id=user.steam_id_64,
+        steam_avatar_url=user.steam_avatar_url,
+        steam_sync_status=user.steam_sync_status,
+        last_synced_at=user.last_synced_at,
+        has_completed_survey=has_completed_survey,
+        user_flow_status=(
+            UserFlowStatus.READY if has_completed_survey else UserFlowStatus.NEEDS_SURVEY
+        ),
+        steam_library=steam_library,
+    )
+
+
+async def update_me(
+    db: AsyncSession,
+    user_id: int,
+    request: ProfileUpdateRequest,
+) -> UserResponse:
+    user = await get_user_by_id(db, user_id)
+    if user is None:
+        raise NotFoundException("사용자를 찾을 수 없습니다.")
+
+    if "nickname" in request.model_fields_set and request.nickname is not None:
+        existing_user = await get_user_by_nickname(db, request.nickname)
+        if existing_user is not None and existing_user.id != user.id:
+            raise ConflictException("이미 사용 중인 닉네임입니다.")
+        user.nickname = request.nickname
+
+    if "bio" in request.model_fields_set:
+        user.bio = request.bio
+    if "gender" in request.model_fields_set:
+        user.gender = request.gender
+    if "birth_date" in request.model_fields_set:
+        user.birth_date = request.birth_date  # type: ignore[assignment]
+
+    await db.commit()
+    return await get_me(db, user.id)
+
+
+async def get_my_activity(
+    db: AsyncSession,
+    user_id: int,
+) -> UserActivityResponse:
+    user = await get_user_by_id(db, user_id)
+    if user is None:
+        raise NotFoundException("사용자를 찾을 수 없습니다.")
+
+    steam_library = await build_steam_library_response(db, user.id)
+    return UserActivityResponse(
+        user_id=user.id,
+        steam_linked=user.steam_linked,
+        steam_sync_status=user.steam_sync_status,
+        library_game_count=steam_library.library_game_count,
+        total_playtime_minutes=steam_library.total_playtime_minutes,
+        total_playtime_hours=steam_library.total_playtime_hours,
+        recent_games=steam_library.games,
+    )
+
+
+async def build_steam_library_response(
+    db: AsyncSession,
+    user_id: int,
+) -> SteamLibraryResponse:
+    library_rows = await get_user_steam_library_rows(db, user_id)
+    library_games = [
+        build_library_game_response(library_game, game) for library_game, game in library_rows
+    ]
+    total_playtime_minutes = sum(game.playtime_minutes for game in library_games)
+
+    return SteamLibraryResponse(
+        library_game_count=len(library_games),
+        total_playtime_minutes=total_playtime_minutes,
+        total_playtime_hours=minutes_to_hours(total_playtime_minutes),
+        games=library_games,
+    )
+
+
+def build_library_game_response(
+    library_game: UserLibraryGame,
+    game: Game | None,
+) -> SteamLibraryGameResponse:
+    return SteamLibraryGameResponse(
+        steam_app_id=library_game.steam_app_id,
+        game_id=None if game is None else game.id,
+        title=get_library_game_title(library_game, game),
+        image_url=None if game is None else game.image_url,
+        genres=[] if game is None else list(game.genres),
+        playtime_minutes=library_game.playtime_minutes,
+        playtime_hours=minutes_to_hours(library_game.playtime_minutes),
+        last_played_at=library_game.last_played_at,
+        synced_at=library_game.synced_at,
+        rating=None if game is None or game.review_score is None else float(game.review_score),
+    )
+
+
+def get_library_game_title(library_game: UserLibraryGame, game: Game | None) -> str:
+    if game is not None:
+        return game.title
+    return f"Steam App {library_game.steam_app_id}"
+
+
+def minutes_to_hours(minutes: int) -> float:
+    return round(minutes / 60, 1)
+
+
 async def reset_password(
     db: AsyncSession,
     request: PasswordResetRequest,
@@ -249,28 +390,6 @@ async def logout_user(
         delete_refresh_cookie(response)
 
     return MessageResponse(message="로그아웃 되었습니다.")
-
-
-async def get_me(
-    db: AsyncSession,
-    user_id: int,
-) -> UserResponse:
-    user = await get_user_by_id(db, user_id)
-    if user is None:
-        raise NotFoundException("사용자를 찾을 수 없습니다.")
-
-    user_data = UserResponse.model_validate(user).model_dump(
-        exclude={"has_completed_survey", "user_flow_status"}
-    )
-    has_completed_survey = await has_user_stats(db, user.id)
-
-    return UserResponse(
-        **user_data,
-        has_completed_survey=has_completed_survey,
-        user_flow_status=(
-            UserFlowStatus.READY if has_completed_survey else UserFlowStatus.NEEDS_SURVEY
-        ),
-    )
 
 
 async def withdraw_user(

@@ -1,8 +1,13 @@
+from typing import cast
+
 from httpx import ASGITransport, AsyncClient
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.main import app
 from app.steam import router
+from app.steam.models import SteamSyncStatus
+from app.steam.schemas import SteamLinkRequest, SteamLinkResponse
 
 
 @pytest.mark.asyncio
@@ -38,3 +43,45 @@ async def test_removed_steam_helper_routes_return_404() -> None:
     assert recent_response.status_code == 404
     assert sync_response.status_code == 404
     assert sync_status_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_steam_link_queues_library_sync_after_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    queued_user_ids: list[int] = []
+
+    class FakeSession:
+        committed = False
+
+        async def commit(self) -> None:
+            self.committed = True
+
+    async def link_steam_account(
+        db: AsyncSession,
+        user_id: int,
+        steam_id: str,
+    ) -> SteamLinkResponse:
+        return SteamLinkResponse(
+            steam_linked=True,
+            steam_id_64=steam_id,
+            steam_sync_status=SteamSyncStatus.FAILED,
+        )
+
+    def enqueue_steam_library_sync(user_id: int) -> str:
+        queued_user_ids.append(user_id)
+        return "task-id"
+
+    monkeypatch.setattr(router, "link_steam_account", link_steam_account)
+    monkeypatch.setattr(router, "enqueue_steam_library_sync", enqueue_steam_library_sync)
+
+    db = FakeSession()
+    response = await router.steam_link_api(
+        request=SteamLinkRequest(steam_id="76561198000000000"),
+        user_id=7,
+        db=cast("AsyncSession", db),
+    )
+
+    assert response.steam_linked is True
+    assert db.committed is True
+    assert queued_user_ids == [7]

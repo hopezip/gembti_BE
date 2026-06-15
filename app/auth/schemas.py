@@ -132,6 +132,35 @@ class PasswordResetRequest(BaseModel):
         return self
 
 
+class ProfileUpdateRequest(BaseModel):
+    nickname: str | None = Field(default=None, min_length=2, max_length=8)
+    bio: str | None = Field(default=None, max_length=160)
+    gender: Gender | None = None
+    birth_date: date | None = None
+
+    @field_validator("nickname")
+    @classmethod
+    def validate_nickname(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        if not re.fullmatch(r"[가-힣A-Za-z0-9]+", value):
+            raise ValueError("닉네임에는 특수문자를 사용할 수 없습니다.")
+        return value
+
+    @field_validator("gender", mode="before")
+    @classmethod
+    def normalize_gender(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.lower()
+        return value
+
+    @model_validator(mode="after")
+    def validate_profile_update(self) -> "ProfileUpdateRequest":
+        if not self.model_fields_set:
+            raise ValueError("수정할 프로필 항목이 필요합니다.")
+        return self
+
+
 class NicknameCheckResponse(BaseModel):
     available: bool
     message: str
@@ -157,6 +186,26 @@ class WithdrawResponse(BaseModel):
     hard_delete_after: datetime
 
 
+class SteamLibraryGameResponse(BaseModel):
+    steam_app_id: int
+    game_id: int | None = None
+    title: str
+    image_url: str | None = None
+    genres: list[str] = Field(default_factory=list)
+    playtime_minutes: int
+    playtime_hours: float
+    last_played_at: datetime | None = None
+    synced_at: datetime
+    rating: float | None = None
+
+
+class SteamLibraryResponse(BaseModel):
+    library_game_count: int
+    total_playtime_minutes: int
+    total_playtime_hours: float
+    games: list[SteamLibraryGameResponse] = Field(default_factory=list)
+
+
 class AuthUserResponse(BaseModel):
     id: int
     email: str
@@ -174,8 +223,23 @@ class AuthUserResponse(BaseModel):
 
 
 class UserResponse(AuthUserResponse):
+    user_id: int
+    gender: Gender | None = None
+    birth_date: date | None = None
+    steam_id: str | None = None
     has_completed_survey: bool = False
     user_flow_status: UserFlowStatus = UserFlowStatus.NEEDS_SURVEY
+    steam_library: SteamLibraryResponse
+
+
+class UserActivityResponse(BaseModel):
+    user_id: int
+    steam_linked: bool
+    steam_sync_status: str | None = None
+    library_game_count: int
+    total_playtime_minutes: int
+    total_playtime_hours: float
+    recent_games: list[SteamLibraryGameResponse] = Field(default_factory=list)
 
 
 class AccessTokenResponse(BaseModel):
