@@ -26,7 +26,9 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/gembti-be:dev
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/gembti-be:dev
+            ${{ secrets.DOCKERHUB_USERNAME }}/gembti-be:${{ github.sha }}
           cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/gembti-be:cache
           cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/gembti-be:cache,mode=max
 
@@ -65,10 +67,8 @@ jobs:
           key: ${{ secrets.EC2_DEV_SSH_KEY }}
           script: |
             cd ~/gembti_BE
-            git pull origin main
-            docker compose down
             docker compose pull
-            docker compose up -d --build
+            docker compose up -d
             docker image prune -af
 
       - name: Security Group에서 IP 제거
