@@ -10,7 +10,9 @@ class RecommendedGameResponse(BaseModel):
     title: str = Field(description="게임명")
     image_url: str | None = Field(default=None, description="대표 이미지 URL")
     genres: list[str] = Field(description="게임 장르 목록")
-    review_score: float | None = Field(default=None, description="유저 평가 점수")
+    rating: float | None = Field(
+        default=None, ge=0.0, le=5.0, description="5점 만점 기준 게임 평점"
+    )
     similarity_score: float = Field(description="코사인 유사도 점수")
     similarity_rank: int = Field(description="추천 순위")
 

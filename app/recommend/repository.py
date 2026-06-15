@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.game.models import Game
 from app.recommend.models import RecommendationItem, RecommendationSourceType
@@ -70,3 +71,27 @@ async def save_recommendation_items(
 
     await db.flush()
     return items
+
+
+async def get_latest_recommendation_items(
+    db: AsyncSession,
+    user_id: int,
+) -> list[RecommendationItem]:
+    latest_created_at_subquery = (
+        select(RecommendationItem.created_at)
+        .where(RecommendationItem.user_id == user_id)
+        .order_by(RecommendationItem.created_at.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+
+    result = await db.execute(
+        select(RecommendationItem)
+        .where(
+            RecommendationItem.user_id == user_id,
+            RecommendationItem.created_at == latest_created_at_subquery,
+        )
+        .options(selectinload(RecommendationItem.game))
+        .order_by(RecommendationItem.similarity_rank.asc())
+    )
+    return list(result.scalars().all())
