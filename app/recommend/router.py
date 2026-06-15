@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.core.dependencies import get_current_user_id, get_db
 from app.recommend.schemas import RecommendationGenerateResponse
-from app.recommend.service import generate_recommendations
+from app.recommend.service import generate_recommendations, get_latest_recommendations
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,3 +64,30 @@ async def generate(
     user_id: int = Depends(get_current_user_id),
 ):
     return await generate_recommendations(db=db, user_id=user_id, limit=limit)
+
+
+@router.get(
+    "/latest_reco",
+    response_model=RecommendationGenerateResponse,
+    summary="최신 추천 결과 조회",
+    description="로그인 사용자의 가장 최근 추천 게임 목록을 조회합니다.",
+    responses={
+        401: {
+            "description": "인증 실패",
+            "content": {"application/json": {"example": {"error": "인증이 필요합니다."}}},
+        },
+        404: {
+            "description": "추천 기록 없음",
+            "content": {"application/json": {"example": {"error": "추천 기록 없음"}}},
+        },
+        500: {
+            "description": "서버 내부 오류",
+            "content": {"application/json": {"example": {"error": "서버 내부 오류"}}},
+        },
+    },
+)
+async def latest_reco(
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    return await get_latest_recommendations(db=db, user_id=user_id)
