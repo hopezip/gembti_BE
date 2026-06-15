@@ -37,10 +37,7 @@ services:
 
   # ── FastAPI ───────────────────────────────────────────
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: runtime
+    image: ${DOCKERHUB_USERNAME}/gembti-be:dev
     container_name: gembti_app
     restart: unless-stopped
     env_file: .env
@@ -60,10 +57,7 @@ services:
 
   # ── Celery Worker ─────────────────────────────────────
   celery:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: runtime
+    image: ${DOCKERHUB_USERNAME}/gembti-be:dev
     container_name: gembti_celery
     restart: unless-stopped
     command: celery -A app.core.celery_app worker --beat --loglevel=info --concurrency=1
