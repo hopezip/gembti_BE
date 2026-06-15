@@ -31,7 +31,7 @@ class DiscountedRecommendedGameResponse(BaseModel):
     genres: list[str]
     price_krw: int | None
     original_price_krw: int | None
-    discount_percent: int
+    discount_percent: int = Field(ge=0, le=100)
     rating: float | None = Field(default=None, ge=0.0, le=5.0)
     similarity_score: float
     similarity_rank: int
@@ -48,7 +48,7 @@ class HighlyRatedRecommendedGameResponse(BaseModel):
     image_url: str | None = None
     genres: list[str]
     rating: float | None = Field(default=None, ge=0.0, le=5.0)
-    review_count: int
+    review_count: int = Field(ge=0)
     similarity_score: float
     similarity_rank: int
 
@@ -59,12 +59,12 @@ class HighlyRatedRecommendationsResponse(BaseModel):
 
 class PopularRecommendedGameResponse(BaseModel):
     recommendation_item_id: int
-    rank: int
+    rank: int = Field(ge=1)
     game_id: int
     title: str
     image_url: str | None = None
     genres: list[str]
-    current_players: int
+    current_players: int = Field(ge=0)
     rating: float | None = Field(default=None, ge=0.0, le=5.0)
     current_players_updated_at: datetime | None
     similarity_score: float
