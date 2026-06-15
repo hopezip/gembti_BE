@@ -4,6 +4,7 @@ import secrets
 from typing import Any, cast
 
 from app.core.config import settings
+from app.core.enums import RedisPurpose
 from app.core.redis import get_redis
 
 STEAM_SIGNUP_PREFIX = "auth:steam_signup"
@@ -18,7 +19,7 @@ async def create_steam_signup_session(
     avatar_url: str | None,
 ) -> str:
     signup_token = f"steam_signup_{secrets.token_urlsafe(32)}"
-    redis = cast("Any", await get_redis())
+    redis = cast("Any", await get_redis(RedisPurpose.STEAM))
     await redis.hset(
         steam_signup_key(signup_token),
         mapping={
@@ -31,7 +32,7 @@ async def create_steam_signup_session(
 
 
 async def consume_steam_signup_session(signup_token: str) -> tuple[int, str | None] | None:
-    redis = cast("Any", await get_redis())
+    redis = cast("Any", await get_redis(RedisPurpose.STEAM))
     key = steam_signup_key(signup_token)
     session = await redis.hgetall(key)
     if not session:

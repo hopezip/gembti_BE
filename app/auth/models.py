@@ -9,28 +9,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.orm.attributes import NO_VALUE
 
 from app.core.database import Base
-from app.core.enums import enum_values
+from app.core.enums import Gender, LoginProvider, UserStatus, enum_values
 
 if TYPE_CHECKING:
     from app.steam.models import SteamAccount, UserLibraryGame
-
-
-class LoginProvider(StrEnum):
-    EMAIL = "email"
-    STEAM = "steam"
-
-
-class UserStatus(StrEnum):
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    WITHDRAWN = "withdrawn"
-    DELETED = "deleted"
-
-
-class Gender(StrEnum):
-    MALE = "male"
-    FEMALE = "female"
-    OTHER = "other"
 
 
 class EmailVerificationPurpose(StrEnum):

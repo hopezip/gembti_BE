@@ -21,6 +21,9 @@ class Settings(BaseSettings):
 
     # ── Redis ────────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_AUTH_URL: str | None = None
+    REDIS_EMAIL_URL: str | None = None
+    REDIS_STEAM_URL: str | None = None
 
     # ── JWT / 인증 ────────────────────────────────────────
     SECRET_KEY: str

@@ -4,7 +4,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.auth.models import User, UserStatus, UserWithdrawalRequest, UserWithdrawalStatus
+from app.auth.models import User, UserWithdrawalRequest, UserWithdrawalStatus
+from app.core.enums import UserStatus
 from app.stat.models import UserStats
 
 

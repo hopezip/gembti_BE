@@ -4,6 +4,7 @@ from typing import Any, cast
 
 from app.auth.models import EmailVerificationPurpose
 from app.core.config import settings
+from app.core.enums import RedisPurpose
 from app.core.redis import get_redis
 
 EMAIL_CODE_PREFIX = "auth:email:code"
@@ -36,7 +37,7 @@ async def save_verification_code(
     purpose: EmailVerificationPurpose,
     code: str,
 ) -> None:
-    redis = cast("Any", await get_redis())
+    redis = cast("Any", await get_redis(RedisPurpose.EMAIL))
     current_key = code_key(email, purpose)
     current_hash = await redis.get(current_key)
     if isinstance(current_hash, str):
@@ -57,7 +58,7 @@ async def delete_verification_code(
     email: str,
     purpose: EmailVerificationPurpose,
 ) -> None:
-    redis = cast("Any", await get_redis())
+    redis = cast("Any", await get_redis(RedisPurpose.EMAIL))
     await redis.delete(code_key(email, purpose), previous_code_key(email, purpose))
 
 
@@ -66,7 +67,7 @@ async def verify_email_code(
     purpose: EmailVerificationPurpose,
     code: str,
 ) -> bool:
-    redis = cast("Any", await get_redis())
+    redis = cast("Any", await get_redis(RedisPurpose.EMAIL))
     saved_hash = await redis.get(code_key(email, purpose))
     previous_hash = await redis.get(previous_code_key(email, purpose))
     candidate_hashes = [
@@ -92,5 +93,5 @@ async def consume_verified_email(
     email: str,
     purpose: EmailVerificationPurpose,
 ) -> bool:
-    redis = cast("Any", await get_redis())
+    redis = cast("Any", await get_redis(RedisPurpose.EMAIL))
     return bool(await redis.getdel(verified_key(email, purpose)))

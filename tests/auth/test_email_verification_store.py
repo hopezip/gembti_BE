@@ -5,6 +5,7 @@ import pytest
 from app.auth import email_verification_store
 from app.auth.models import EmailVerificationPurpose
 from app.core.config import settings
+from app.core.enums import RedisPurpose
 
 PURPOSE = EmailVerificationPurpose.SIGNUP
 
@@ -34,12 +35,16 @@ class FakeRedis:
 @pytest.fixture
 def fake_redis(monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeRedis]:
     redis = FakeRedis()
+    purposes: list[RedisPurpose] = []
 
-    async def get_fake_redis() -> FakeRedis:
+    async def get_fake_redis(purpose: RedisPurpose) -> FakeRedis:
+        purposes.append(purpose)
         return redis
 
     monkeypatch.setattr(email_verification_store, "get_redis", get_fake_redis)
     yield redis
+    assert purposes
+    assert all(purpose == RedisPurpose.EMAIL for purpose in purposes)
 
 
 def test_email_keys_are_normalized() -> None:

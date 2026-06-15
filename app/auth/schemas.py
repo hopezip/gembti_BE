@@ -4,8 +4,9 @@ import re
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
-from app.auth.models import EmailVerificationPurpose, Gender, LoginProvider, UserStatus
+from app.auth.models import EmailVerificationPurpose
 from app.auth.password_policy import validate_password_policy
+from app.core.enums import Gender, LoginProvider, UserStatus
 
 
 class EmailCodeSendRequest(BaseModel):
@@ -156,24 +157,6 @@ class WithdrawResponse(BaseModel):
     hard_delete_after: datetime
 
 
-class UserResponse(BaseModel):
-    id: int
-    email: str
-    nickname: str
-    bio: str | None
-    login_provider: LoginProvider
-    status: UserStatus
-    steam_linked: bool
-    steam_id_64: str | None
-    steam_avatar_url: str | None
-    steam_sync_status: str | None
-    last_synced_at: datetime | None
-    has_completed_survey: bool = False
-    user_flow_status: UserFlowStatus = UserFlowStatus.NEEDS_SURVEY
-
-    model_config = {"from_attributes": True}
-
-
 class AuthUserResponse(BaseModel):
     id: int
     email: str
@@ -188,6 +171,11 @@ class AuthUserResponse(BaseModel):
     last_synced_at: datetime | None
 
     model_config = {"from_attributes": True}
+
+
+class UserResponse(AuthUserResponse):
+    has_completed_survey: bool = False
+    user_flow_status: UserFlowStatus = UserFlowStatus.NEEDS_SURVEY
 
 
 class AccessTokenResponse(BaseModel):

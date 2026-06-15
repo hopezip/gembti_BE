@@ -1,13 +1,14 @@
 from pydantic import ValidationError
 import pytest
 
-from app.auth.models import EmailVerificationPurpose, Gender
+from app.auth.models import EmailVerificationPurpose
 from app.auth.schemas import (
     EmailCodeSendRequest,
     EmailCodeVerifyRequest,
     PasswordResetRequest,
     SignupRequest,
 )
+from app.core.enums import Gender
 from app.steam.schemas import SteamCompleteSignupRequest
 
 

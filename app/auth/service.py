@@ -15,9 +15,7 @@ from app.auth.email_verification_store import (
 )
 from app.auth.models import (
     EmailVerificationPurpose,
-    LoginProvider,
     User,
-    UserStatus,
     UserWithdrawalRequest,
     UserWithdrawalStatus,
 )
@@ -33,6 +31,7 @@ from app.auth.repository import (
     get_user_by_email,
     get_user_by_id,
     get_user_by_nickname,
+    has_user_stats,
     save_user,
 )
 from app.auth.schemas import (
@@ -40,17 +39,22 @@ from app.auth.schemas import (
     AuthResponse,
     AuthUserResponse,
     LoginRequest,
+    MessageResponse,
     NicknameCheckResponse,
     PasswordResetRequest,
     SignupRequest,
+    UserFlowStatus,
+    UserResponse,
     WithdrawRequest,
     WithdrawResponse,
 )
 from app.auth.token_blacklist import blacklist_access_token
+from app.core.enums import LoginProvider, UserStatus
 from app.core.exceptions import (
     BadRequestException,
     ConflictException,
     ForbiddenException,
+    NotFoundException,
     UnauthorizedException,
 )
 from app.core.security import (
@@ -139,7 +143,7 @@ async def login(
     db: AsyncSession,
     response: Response,
     request: LoginRequest,
-) -> AuthResponse:
+) -> AccessTokenResponse:
     user = await get_user_by_email(db, request.email.lower())
 
     if (
@@ -151,7 +155,8 @@ async def login(
     if user.status != UserStatus.ACTIVE:
         raise ForbiddenException("사용할 수 없는 계정입니다.")
 
-    return await issue_auth_tokens(response, user)
+    auth_response = await issue_auth_tokens(response, user)
+    return AccessTokenResponse(access_token=auth_response.access_token)
 
 
 async def check_nickname_available(
@@ -210,6 +215,16 @@ async def refresh_access_token(
     return AccessTokenResponse(access_token=auth_response.access_token)
 
 
+async def refresh_access_token_from_cookie(
+    db: AsyncSession,
+    response: Response,
+    refresh_token: str | None,
+) -> AccessTokenResponse:
+    if refresh_token is None:
+        raise UnauthorizedException("Refresh Token이 없습니다.")
+    return await refresh_access_token(db, response, refresh_token)
+
+
 async def logout_tokens(
     response: Response,
     access_token: str,
@@ -219,6 +234,43 @@ async def logout_tokens(
     await blacklist_access_token(access_token)
     await delete_refresh_token(refresh_token, user_id=user_id)
     delete_refresh_cookie(response)
+
+
+async def logout_user(
+    response: Response,
+    access_token: str,
+    refresh_token: str | None,
+    user_id: int,
+) -> MessageResponse:
+    if refresh_token is not None:
+        await logout_tokens(response, access_token, refresh_token, user_id)
+    else:
+        await blacklist_access_token(access_token)
+        delete_refresh_cookie(response)
+
+    return MessageResponse(message="로그아웃 되었습니다.")
+
+
+async def get_me(
+    db: AsyncSession,
+    user_id: int,
+) -> UserResponse:
+    user = await get_user_by_id(db, user_id)
+    if user is None:
+        raise NotFoundException("사용자를 찾을 수 없습니다.")
+
+    user_data = UserResponse.model_validate(user).model_dump(
+        exclude={"has_completed_survey", "user_flow_status"}
+    )
+    has_completed_survey = await has_user_stats(db, user.id)
+
+    return UserResponse(
+        **user_data,
+        has_completed_survey=has_completed_survey,
+        user_flow_status=(
+            UserFlowStatus.READY if has_completed_survey else UserFlowStatus.NEEDS_SURVEY
+        ),
+    )
 
 
 async def withdraw_user(

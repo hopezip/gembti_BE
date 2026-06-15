@@ -2,8 +2,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
-from app.auth.models import Gender
 from app.auth.schemas import AuthUserResponse, normalize_birth_date_value, normalize_gender_value
+from app.core.enums import Gender
 from app.steam.models import SteamSyncStatus
 
 
