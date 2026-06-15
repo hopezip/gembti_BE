@@ -26,7 +26,7 @@ class FakeRedis:
 def fake_redis(monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeRedis]:
     redis = FakeRedis()
 
-    async def get_fake_redis() -> FakeRedis:
+    async def get_fake_redis(purpose: object | None = None) -> FakeRedis:
         return redis
 
     monkeypatch.setattr(token_blacklist, "get_redis", get_fake_redis)
