@@ -10,6 +10,7 @@ from app.chat.schemas import (
     SupportChatMessageRequest,
 )
 from app.core.config import settings
+from app.core.enums import RedisPurpose
 from app.core.exceptions import BadRequestException
 from app.core.redis import get_redis
 
@@ -27,7 +28,7 @@ def support_chat_session_turns_key(session_id: str) -> str:
 async def create_support_chat_session() -> str:
     session_id = str(uuid4())
     key = support_chat_session_key(session_id)
-    redis = cast("Any", await get_redis())
+    redis = cast("Any", await get_redis(RedisPurpose.SUPPORT))
 
     await redis.hset(key, mapping={"turn_count": "0"})
     await redis.expire(key, settings.SUPPORT_CHAT_SESSION_TTL_SECONDS)
@@ -37,7 +38,7 @@ async def create_support_chat_session() -> str:
 
 async def refresh_support_chat_session_ttl(session_id: str) -> bool:
     key = support_chat_session_key(session_id)
-    redis = cast("Any", await get_redis())
+    redis = cast("Any", await get_redis(RedisPurpose.SUPPORT))
 
     if not await redis.exists(key):
         return False
@@ -52,7 +53,7 @@ async def save_support_chat_turn(
     assistant_answer: str,
 ) -> None:
     key = support_chat_session_turns_key(session_id)
-    redis = cast("Any", await get_redis())
+    redis = cast("Any", await get_redis(RedisPurpose.SUPPORT))
     turn = json.dumps(
         {"user": user_message, "assistant": assistant_answer},
         ensure_ascii=False,
@@ -65,7 +66,7 @@ async def save_support_chat_turn(
 
 async def get_recent_support_chat_turns(session_id: str) -> list[dict[str, str]]:
     key = support_chat_session_turns_key(session_id)
-    redis = cast("Any", await get_redis())
+    redis = cast("Any", await get_redis(RedisPurpose.SUPPORT))
     turns = await redis.lrange(key, 0, -1)
     decoded_turns = [
         json.loads(turn.decode("utf-8") if isinstance(turn, bytes) else turn) for turn in turns
@@ -120,7 +121,7 @@ class SupportChatAnswer:
 async def generate_support_chat_answer(
     message: str,
     recent_turns: list[dict[str, str]],
-) -> SupportChatAnswer:
+) -> SupportChatAnswer | str:
     # PR 1에서는 세션/API 계약만 고정한다.
     # 실제 RAG 답변 생성은 후속 PR에서 이 함수 내부 구현만 교체한다.
     _ = build_support_chat_question(message, recent_turns)

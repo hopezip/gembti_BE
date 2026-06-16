@@ -6,6 +6,7 @@ import pytest
 
 from app.chat.cs import service as support_chat_service
 from app.core.dependencies import get_current_user_id
+from app.core.enums import RedisPurpose
 from app.main import app
 
 
@@ -53,7 +54,8 @@ class FakeRedis:
 def fake_redis(monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeRedis]:
     redis = FakeRedis()
 
-    async def get_fake_redis() -> FakeRedis:
+    async def get_fake_redis(purpose: RedisPurpose) -> FakeRedis:
+        assert purpose == RedisPurpose.SUPPORT
         return redis
 
     monkeypatch.setattr(support_chat_service, "get_redis", get_fake_redis)
