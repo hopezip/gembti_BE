@@ -5,10 +5,11 @@ import re
 from typing import TYPE_CHECKING
 from urllib.parse import urlencode
 
-from app.auth.models import LoginProvider, User, UserStatus
+from app.auth.models import User
 from app.auth.repository import get_user_by_email, get_user_by_id, get_user_by_nickname
 from app.auth.service import issue_auth_tokens
 from app.core.config import settings
+from app.core.enums import LoginProvider, UserStatus
 from app.core.exceptions import BadRequestException, ConflictException, NotFoundException
 from app.steam.client import (
     SteamLibraryVisibility,

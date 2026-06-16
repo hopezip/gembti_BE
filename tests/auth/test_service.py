@@ -6,14 +6,17 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service
-from app.auth.models import LoginProvider, User, UserStatus, UserWithdrawalStatus
+from app.auth.models import User, UserWithdrawalStatus
 from app.auth.schemas import (
+    AccessTokenResponse,
     AuthResponse,
     AuthUserResponse,
     LoginRequest,
     PasswordResetRequest,
+    UserFlowStatus,
     WithdrawRequest,
 )
+from app.core.enums import LoginProvider, UserStatus
 from app.core.exceptions import BadRequestException, ForbiddenException, UnauthorizedException
 from app.core.security import decode_token
 
@@ -27,6 +30,8 @@ def create_user() -> User:
             password_hash="hashed",
             nickname="tester",
             bio=None,
+            gender=None,
+            birth_date=None,
             login_provider=LoginProvider.EMAIL,
             status=UserStatus.ACTIVE,
             steam_linked=False,
@@ -106,7 +111,7 @@ async def test_login_returns_tokens_for_valid_credentials(
         LoginRequest(email="test@example.com", password="Password!1"),
     )
 
-    assert result == expected
+    assert result == AccessTokenResponse(access_token=expected.access_token)
 
 
 @pytest.mark.asyncio
@@ -160,6 +165,71 @@ async def test_check_nickname_available_returns_true(
 
     assert result.available is True
     assert result.message == "사용 가능한 닉네임입니다."
+
+
+@pytest.mark.asyncio
+async def test_get_me_returns_user_flow_status_for_completed_survey(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = create_user()
+
+    async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
+        return user
+
+    async def has_user_stats(db: AsyncSession, user_id: int) -> bool:
+        return True
+
+    async def get_user_steam_library_rows(db: AsyncSession, user_id: int):
+        return []
+
+    monkeypatch.setattr(service, "get_user_by_id", get_user_by_id)
+    monkeypatch.setattr(service, "has_user_stats", has_user_stats)
+    monkeypatch.setattr(
+        service,
+        "get_user_steam_library_rows",
+        get_user_steam_library_rows,
+    )
+
+    result = await service.get_me(cast("AsyncSession", object()), user_id=7)
+
+    assert result.id == 7
+    assert result.user_id == 7
+    assert result.email == "test@example.com"
+    assert result.nickname == "tester"
+    assert result.has_completed_survey is True
+    assert result.user_flow_status == UserFlowStatus.READY
+    assert result.steam_library.library_game_count == 0
+    assert result.steam_library.total_playtime_minutes == 0
+    assert result.steam_library.games == []
+
+
+@pytest.mark.asyncio
+async def test_get_me_returns_needs_survey_without_stats(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = create_user()
+
+    async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
+        return user
+
+    async def has_user_stats(db: AsyncSession, user_id: int) -> bool:
+        return False
+
+    async def get_user_steam_library_rows(db: AsyncSession, user_id: int):
+        return []
+
+    monkeypatch.setattr(service, "get_user_by_id", get_user_by_id)
+    monkeypatch.setattr(service, "has_user_stats", has_user_stats)
+    monkeypatch.setattr(
+        service,
+        "get_user_steam_library_rows",
+        get_user_steam_library_rows,
+    )
+
+    result = await service.get_me(cast("AsyncSession", object()), user_id=7)
+
+    assert result.has_completed_survey is False
+    assert result.user_flow_status == UserFlowStatus.NEEDS_SURVEY
 
 
 @pytest.mark.asyncio

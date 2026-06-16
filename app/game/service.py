@@ -20,8 +20,6 @@ from app.game.repository import upsert_game
 
 logger = logging.getLogger(__name__)
 
-# Steam 장르/카테고리 ID → 영문 이름 (trait_mapper 키와 일치해야 함)
-# l=korean 등 현지화 언어로 받아도 벡터화는 영문 기준으로 수행한다.
 _GENRE_ID_EN: dict[str, str] = {
     "1": "Action",
     "25": "Adventure",
@@ -44,12 +42,12 @@ _CATEGORY_ID_EN: dict[str, str] = {
 }
 
 _DATE_FORMATS = [
-    "%b %d, %Y",  # Jan 1, 2020
-    "%d %b, %Y",  # 1 Jan, 2020
-    "%B %d, %Y",  # January 1, 2020
-    "%d %B, %Y",  # 1 January, 2020
-    "%Y년 %m월 %d일",  # 2020년 1월 1일 (l=korean)
-    "%Y",  # 2020
+    "%b %d, %Y",
+    "%d %b, %Y",
+    "%B %d, %Y",
+    "%d %B, %Y",
+    "%Y년 %m월 %d일",
+    "%Y",
 ]
 
 
@@ -67,6 +65,43 @@ def _parse_release_date(date_str: str) -> date | None:
     return None
 
 
+_ADULT_KEYWORDS = (
+    "hentai",
+    "eroge",
+    "18+",
+    "xxx",
+    "adult only",
+    "nsfw",
+    "uncensored",
+    "porn",
+)
+_ADULT_GENRES = ("sexual content", "nudity", "nsfw")
+# Steam content descriptor ID: 3=성인 전용 성적 콘텐츠, 4=빈번한 노출·성적 콘텐츠
+# ID 1(일부 성적 콘텐츠)은 주류 M등급 게임도 포함하므로 제외해 오탐을 막는다.
+_ADULT_CONTENT_DESCRIPTOR_IDS = {3, 4}
+
+
+def _is_adult_game(data: dict) -> bool:
+    """성인 게임 여부를 Steam의 여러 신호로 판별한다.
+
+    required_age, content_descriptors(공식 등급), 장르, 제목 키워드 순으로 확인한다.
+    Steam이 required_age=0으로 내려주는 성인 게임을 보완하기 위해 다중 신호를 쓴다.
+    """
+    if int(data.get("required_age") or 0) >= 18:
+        return True
+
+    descriptor_ids = (data.get("content_descriptors") or {}).get("ids") or []
+    if any(descriptor_id in _ADULT_CONTENT_DESCRIPTOR_IDS for descriptor_id in descriptor_ids):
+        return True
+
+    genres = [(g.get("description") or "").lower() for g in data.get("genres", [])]
+    if any(adult in genre for genre in genres for adult in _ADULT_GENRES):
+        return True
+
+    title = (data.get("name") or "").lower()
+    return any(keyword in title for keyword in _ADULT_KEYWORDS)
+
+
 def _parse_game_data(
     app_id: int,
     data: dict,
@@ -77,11 +112,9 @@ def _parse_game_data(
     genres_raw = data.get("genres", [])
     categories_raw = data.get("categories", [])
 
-    # DB 저장: 현지화된 이름 그대로 (l=korean 시 한글)
     genres = [g["description"] for g in genres_raw]
     categories = [c["description"] for c in categories_raw]
 
-    # 벡터화: ID → 영문 이름 변환 (trait_mapper 키와 일치)
     genres_for_vector = [
         _GENRE_ID_EN.get(str(g.get("id", "")), g["description"]) for g in genres_raw
     ]
@@ -96,7 +129,7 @@ def _parse_game_data(
     else:
         price_ov = data.get("price_overview", {})
         raw = price_ov.get("final")
-        price_krw = raw // 100 if raw is not None else None  # Steam은 모든 통화를 100배로 반환
+        price_krw = raw // 100 if raw is not None else None
         discount_percent = int(price_ov.get("discount_percent") or 0)
 
     release_date = None
@@ -104,12 +137,8 @@ def _parse_game_data(
     if not rd.get("coming_soon") and rd.get("date"):
         release_date = _parse_release_date(rd["date"])
 
-    required_age = int(data.get("required_age") or 0)
-    _adult_keywords = ("hentai", "eroge", "18+", "xxx", "adult only")
-    _title_lower = (data.get("name") or "").lower()
-    is_active = required_age < 18 and not any(kw in _title_lower for kw in _adult_keywords)
+    is_active = not _is_adult_game(data)
 
-    # 리뷰 통계: 긍정 비율(0~100) + 전체 수
     review_score = None
     review_count = 0
     if reviews:
@@ -119,7 +148,6 @@ def _parse_game_data(
             review_score = round(positive / total * 100, 2)
         review_count = total
 
-    # 현재 접속자 수
     current_players_updated_at = None
     if current_players is not None:
         current_players_updated_at = datetime.now(UTC)
@@ -208,11 +236,7 @@ async def fetch_and_save_games(
     return success, failed
 
 
-# ── 게임 API 서비스 ──────────────────────────────────────────────────────────
-
-# Steam 장르 → 정규화 한글 (영문/한글 양방향)
 _GENRE_NORMALIZE: dict[str, str] = {
-    # English
     "Action": "액션",
     "Adventure": "어드벤처",
     "RPG": "롤플레잉",
@@ -223,7 +247,6 @@ _GENRE_NORMALIZE: dict[str, str] = {
     "Sports": "스포츠",
     "Racing": "레이싱",
     "Indie": "인디",
-    # Korean (Steam l=korean)
     "액션": "액션",
     "어드벤처": "어드벤처",
     "롤플레잉 게임": "롤플레잉",
@@ -237,16 +260,13 @@ _GENRE_NORMALIZE: dict[str, str] = {
     "인디": "인디",
 }
 
-# Steam 카테고리 → 정규화 한글 (영문/한글 양방향)
 _CATEGORY_NORMALIZE: dict[str, str] = {
-    # English
     "Single-player": "싱글플레이어",
     "Co-op": "협동",
     "Online Co-op": "온라인 협동",
     "Multi-player": "멀티플레이어",
     "PvP": "플레이어 대전",
     "Online PvP": "온라인 플레이어 대전",
-    # Korean (Steam l=korean)
     "싱글 플레이어": "싱글플레이어",
     "싱글플레이어": "싱글플레이어",
     "협동": "협동",
@@ -257,7 +277,6 @@ _CATEGORY_NORMALIZE: dict[str, str] = {
     "온라인 PvP": "온라인 플레이어 대전",
 }
 
-# Steam 카테고리 설명 → FE 플레이 모드 코드 (정규화 이름 기준으로도 처리)
 _CATEGORY_TO_PLAY_MODE: dict[str, str] = {
     "Single-player": "SINGLE",
     "싱글 플레이어": "SINGLE",
@@ -282,7 +301,6 @@ def _parse_requirements_html(html: str) -> dict:
     if not html:
         return result
 
-    # <br>, <li> → 줄바꿈으로 치환 후 나머지 태그 제거
     text = re.sub(r"<br\s*/?>", "\n", html, flags=re.IGNORECASE)
     text = re.sub(r"<li[^>]*>", "\n", text, flags=re.IGNORECASE)
     text = re.sub(r"<[^>]+>", "", text)
@@ -424,7 +442,6 @@ async def search_games_service(
         SearchResponse,
     )
 
-    # 정규화 이름 → DB 저장 가능한 값 목록으로 변환
     filter_genres = [_genre_db_values(g) for g in (genres or [])]
     filter_categories = [_category_db_values(c) for c in (categories or [])]
 
@@ -526,18 +543,15 @@ async def get_game_detail_service(
 
     detail_json = game.steam_detail_json or {}
 
-    # 개발사/퍼블리셔
     devs = detail_json.get("developers") or []
     pubs = detail_json.get("publishers") or []
     developer = devs[0] if devs else ""
     publisher = pubs[0] if pubs else ""
 
-    # 유사 게임 / 개발사 게임 병렬 조회
     dev_games = await get_developer_games(session, developer, game.id)
 
     price = _build_price_info(game.price_krw, game.discount_percent, game.is_free)
 
-    # PC 사양
     pc_req = detail_json.get("pc_requirements") or {}
     min_spec = _parse_requirements_html(
         pc_req.get("minimum", "") if isinstance(pc_req, dict) else ""
@@ -546,10 +560,8 @@ async def get_game_detail_service(
         pc_req.get("recommended", "") if isinstance(pc_req, dict) else ""
     )
 
-    # 스크린샷
     screenshots = [s["path_full"] for s in detail_json.get("screenshots", []) if "path_full" in s]
 
-    # 트레일러
     trailer_url: str | None = None
     movies = detail_json.get("movies") or []
     if movies:
@@ -561,15 +573,12 @@ async def get_game_detail_service(
             or m.get("mp4", {}).get("480")
         )
 
-    # 언어
     audio_langs, iface_langs = _parse_supported_languages(
         detail_json.get("supported_languages", "")
     )
 
-    # 배경 이미지
     background = detail_json.get("background") or detail_json.get("background_raw") or ""
 
-    # 연령 등급
     required_age = int(detail_json.get("required_age") or 0)
     age_rating = f"{required_age}세 이용가" if required_age > 0 else "전체 이용가"
 

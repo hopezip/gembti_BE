@@ -28,6 +28,7 @@ def _steam_data(
     required_age: int = 0,
     release_date_str: str = "Jan 1, 2020",
     supported_languages: str = "English, Korean",
+    content_descriptor_ids: list[int] | None = None,
 ) -> dict:
     return {
         "type": type_,
@@ -48,6 +49,7 @@ def _steam_data(
         "required_age": required_age,
         "release_date": {"coming_soon": False, "date": release_date_str},
         "supported_languages": supported_languages,
+        "content_descriptors": {"ids": content_descriptor_ids or []},
     }
 
 
@@ -86,6 +88,43 @@ def test_parse_game_data_adult_content_inactive():
     result = _parse_game_data(99, _steam_data(required_age=18), None, None)
 
     assert result["is_active"] is False
+
+
+def test_parse_game_data_adult_by_content_descriptor_inactive():
+    """required_age=0이어도 성인 콘텐츠 디스크립터(3,4)면 is_active=False."""
+    result = _parse_game_data(
+        99, _steam_data(required_age=0, content_descriptor_ids=[3]), None, None
+    )
+
+    assert result["is_active"] is False
+
+
+def test_parse_game_data_adult_by_genre_inactive():
+    """장르에 성인 표지(Sexual Content)가 있으면 is_active=False."""
+    result = _parse_game_data(
+        99,
+        _steam_data(genres=[{"id": "1", "description": "Sexual Content"}]),
+        None,
+        None,
+    )
+
+    assert result["is_active"] is False
+
+
+def test_parse_game_data_adult_by_title_keyword_inactive():
+    """제목에 성인 키워드가 있으면 is_active=False."""
+    result = _parse_game_data(99, _steam_data(name="Hentai Puzzle"), None, None)
+
+    assert result["is_active"] is False
+
+
+def test_parse_game_data_mature_game_stays_active():
+    """폭력(디스크립터 2) 등 비성인 성숙 콘텐츠는 활성 유지."""
+    result = _parse_game_data(
+        99, _steam_data(required_age=0, content_descriptor_ids=[2]), None, None
+    )
+
+    assert result["is_active"] is True
 
 
 def test_parse_game_data_review_score_calculated():

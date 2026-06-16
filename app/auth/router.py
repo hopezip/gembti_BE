@@ -2,8 +2,6 @@ from fastapi import APIRouter, Body, Cookie, Depends, Query, Response, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.cookie import delete_refresh_cookie
-from app.auth.repository import get_user_by_id, has_user_stats
 from app.auth.schemas import (
     AccessTokenResponse,
     AuthResponse,
@@ -13,27 +11,30 @@ from app.auth.schemas import (
     MessageResponse,
     NicknameCheckResponse,
     PasswordResetRequest,
+    ProfileUpdateRequest,
     SignupRequest,
-    UserFlowStatus,
+    UserActivityResponse,
     UserResponse,
     WithdrawRequest,
     WithdrawResponse,
 )
 from app.auth.service import (
     check_nickname_available,
+    get_me,
+    get_my_activity,
     login,
-    logout_tokens,
-    refresh_access_token,
+    logout_user,
+    refresh_access_token_from_cookie,
     reset_password,
     send_email_code,
     signup,
+    update_me,
     verify_email,
     withdraw_user,
 )
-from app.auth.token_blacklist import blacklist_access_token
 from app.core.config import settings
 from app.core.dependencies import bearer_scheme, get_current_user_id, get_db
-from app.core.exceptions import NotFoundException, UnauthorizedException
+from app.core.exceptions import UnauthorizedException
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -138,33 +139,6 @@ async def reset_password_api(
     return MessageResponse(message="비밀번호가 재설정되었습니다.")
 
 
-async def _refresh_api(
-    response: Response,
-    refresh_token: str | None = Cookie(default=None, alias=settings.REFRESH_COOKIE_NAME),
-    db: AsyncSession = Depends(get_db),
-) -> AccessTokenResponse:
-    if refresh_token is None:
-        raise UnauthorizedException("Refresh Token이 없습니다.")
-    return await refresh_access_token(db, response, refresh_token)
-
-
-@router.post(
-    "/token/refresh",
-    response_model=AccessTokenResponse,
-    include_in_schema=False,
-    responses={
-        401: _err("Refresh Token이 없거나 유효하지 않습니다."),
-        403: _err("사용할 수 없는 계정입니다."),
-    },
-)
-async def refresh_token_api(
-    response: Response,
-    refresh_token: str | None = Cookie(default=None, alias=settings.REFRESH_COOKIE_NAME),
-    db: AsyncSession = Depends(get_db),
-) -> AccessTokenResponse:
-    return await _refresh_api(response=response, refresh_token=refresh_token, db=db)
-
-
 @router.post(
     "/refresh",
     response_model=AccessTokenResponse,
@@ -178,7 +152,7 @@ async def refresh_api(
     refresh_token: str | None = Cookie(default=None, alias=settings.REFRESH_COOKIE_NAME),
     db: AsyncSession = Depends(get_db),
 ) -> AccessTokenResponse:
-    return await _refresh_api(response=response, refresh_token=refresh_token, db=db)
+    return await refresh_access_token_from_cookie(db, response, refresh_token)
 
 
 @router.post(
@@ -199,12 +173,7 @@ async def logout_api(
     if credentials is None:
         raise UnauthorizedException()
 
-    if refresh_token is not None:
-        await logout_tokens(response, credentials.credentials, refresh_token, user_id)
-    else:
-        await blacklist_access_token(credentials.credentials)
-        delete_refresh_cookie(response)
-    return MessageResponse(message="로그아웃 되었습니다.")
+    return await logout_user(response, credentials.credentials, refresh_token, user_id)
 
 
 @router.get(
@@ -219,21 +188,46 @@ async def me_api(
     user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
-    user = await get_user_by_id(db, user_id)
-    if user is None:
-        raise NotFoundException("사용자를 찾을 수 없습니다.")
+    return await get_me(db, user_id)
 
-    user_data = UserResponse.model_validate(user).model_dump(
-        exclude={"has_completed_survey", "user_flow_status"}
-    )
-    has_completed_survey = await has_user_stats(db, user.id)
-    return UserResponse(
-        **user_data,
-        has_completed_survey=has_completed_survey,
-        user_flow_status=(
-            UserFlowStatus.READY if has_completed_survey else UserFlowStatus.NEEDS_SURVEY
-        ),
-    )
+
+@router.patch(
+    "/profile",
+    response_model=UserResponse,
+    responses={
+        400: _err("수정할 프로필 항목이 필요합니다."),
+        401: _err("인증 실패"),
+        404: _err("사용자를 찾을 수 없습니다."),
+        409: _err("이미 사용 중인 닉네임입니다."),
+        422: _err("요청 형식이 올바르지 않습니다."),
+    },
+)
+async def update_me_api(
+    request: ProfileUpdateRequest,
+    user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> UserResponse:
+    """현재 사용자 프로필 수정 요청을 서비스 계층으로 위임한다.
+
+    FastAPI가 request body 검증, 로그인 사용자 식별, DB 세션 주입을 처리하고,
+    닉네임 중복 확인과 실제 프로필 수정은 service.update_me에서 담당한다.
+    """
+    return await update_me(db, user_id, request)
+
+
+@router.get(
+    "/me/activity",
+    response_model=UserActivityResponse,
+    responses={
+        401: _err("인증 실패"),
+        404: _err("사용자를 찾을 수 없습니다."),
+    },
+)
+async def my_activity_api(
+    user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> UserActivityResponse:
+    return await get_my_activity(db, user_id)
 
 
 @router.delete(

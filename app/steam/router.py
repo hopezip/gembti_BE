@@ -14,6 +14,7 @@ from app.steam.service import (
     get_frontend_steam_callback_url,
     link_steam_account,
 )
+from app.steam.tasks import enqueue_steam_library_sync
 
 router = APIRouter(tags=["Steam"])
 
@@ -85,4 +86,5 @@ async def steam_link_api(
 ) -> SteamLinkResponse:
     response = await link_steam_account(db, user_id, request.steam_id)
     await db.commit()
+    enqueue_steam_library_sync(user_id)
     return response

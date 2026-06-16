@@ -94,7 +94,7 @@ async def fetch_app_reviews(app_id: int, client: httpx.AsyncClient) -> dict | No
                 "language": "all",
                 "review_type": "all",
                 "purchase_type": "all",
-                "num_per_page": 0,  # 리뷰 본문 제외, 통계만
+                "num_per_page": 0,
             },
             timeout=10.0,
         )

@@ -3,6 +3,7 @@ from typing import Any, cast
 
 from jose import JWTError
 
+from app.core.enums import RedisPurpose
 from app.core.redis import get_redis
 from app.core.security import TokenPayload, decode_token
 
@@ -48,7 +49,7 @@ async def blacklist_access_token(access_token: str) -> bool:
     if ttl <= 0:
         return False
 
-    redis = cast("Any", await get_redis())
+    redis = cast("Any", await get_redis(RedisPurpose.AUTH))
     await redis.set(access_blacklist_key(payload["jti"]), "1", ex=ttl)
     return True
 
@@ -58,5 +59,5 @@ async def is_access_token_blacklisted(access_token: str) -> bool:
     if payload is None:
         return True
 
-    redis = cast("Any", await get_redis())
+    redis = cast("Any", await get_redis(RedisPurpose.AUTH))
     return bool(await redis.exists(access_blacklist_key(payload["jti"])))

@@ -11,6 +11,12 @@ __pycache__
 tests/
 docs/
 *.md
+!docs/
+docs/*
+!docs/help/
+docs/help/*
+!docs/help/support/
+!docs/help/support/*.md
 docker-compose*.yml
 .github/
 nginx/

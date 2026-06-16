@@ -102,6 +102,15 @@ def _create_openai_client(*, api_key: str, timeout: float | None) -> Any:
     return openai_client_type(**kwargs)
 
 
+def _load_openai_api_exception_types() -> tuple[type[BaseException], type[BaseException]]:
+    openai_module = importlib.import_module("openai")
+    authentication_error = getattr(openai_module, "AuthenticationError", None)
+    api_error = getattr(openai_module, "APIError", None)
+    if authentication_error is None or api_error is None:
+        raise EmbeddingConfigurationError("openai exception types are not available")
+    return authentication_error, api_error
+
+
 def _extract_embedding(response: Any, *, expected_dimensions: int | None) -> list[float]:
     data = getattr(response, "data", None)
     if not data:
@@ -183,7 +192,13 @@ class OpenAIEmbeddingClient:
         if self.dimensions is not None:
             request["dimensions"] = self.dimensions
 
-        response = self._client.embeddings.create(**request)
+        authentication_error, api_error = _load_openai_api_exception_types()
+        try:
+            response = self._client.embeddings.create(**request)
+        except authentication_error as exc:
+            raise EmbeddingConfigurationError("openai authentication failed") from exc
+        except api_error as exc:
+            raise EmbeddingResponseError("embedding request failed") from exc
         return _extract_embedding(response, expected_dimensions=self.dimensions)
 
 

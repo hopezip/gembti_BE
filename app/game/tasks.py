@@ -11,7 +11,6 @@ from app.game.service import fetch_and_save_games
 
 logger = logging.getLogger(__name__)
 
-# EC2 micro 기준: 동시 HTTP 요청 2개, 배치 50개
 _SEMAPHORE = 2
 _BATCH_SIZE = 50
 
@@ -35,7 +34,7 @@ def collect_games_task(app_ids: list[int]) -> dict:
     return asyncio.run(_run())
 
 
-@celery_app.task(name="game.refresh_all_games", time_limit=21600)  # 최대 6시간
+@celery_app.task(name="game.refresh_all_games", time_limit=21600)
 def refresh_all_games_task() -> dict:
     """매주 월요일 — Steam 전체 앱 목록에서 DB에 없는 새 게임만 추가한다.
 
