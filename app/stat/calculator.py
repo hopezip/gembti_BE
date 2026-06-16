@@ -53,6 +53,9 @@ def calculate_steam_stats_from_vectors(vectors: list[list[float]]) -> dict[str, 
     axis_totals = dict.fromkeys(AXES, 0.0)
 
     for vector in vectors:
+        if len(vector) != len(AXES):
+            continue
+
         for index, axis in enumerate(AXES):
             axis_totals[axis] += float(vector[index])
 
