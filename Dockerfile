@@ -29,6 +29,7 @@ COPY app/ ./app/
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
 COPY scripts/ ./scripts/
+COPY docs/help/support/ ./docs/help/support/
 
 # .venv/bin을 PATH 앞에 추가
 ENV PATH="/app/.venv/bin:$PATH" \
