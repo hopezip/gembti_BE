@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from app.auth.router import router as auth_router
+from app.chat.cs.router import router as support_chat_router
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.middlewares import register_middlewares
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
     app.include_router(recommend_router, prefix=API_PREFIX)
     app.include_router(game_router, prefix=API_PREFIX)
     app.include_router(steam_router, prefix=API_PREFIX)
+    app.include_router(support_chat_router, prefix=API_PREFIX)
 
     def custom_openapi() -> dict:
         if app.openapi_schema:

@@ -5,6 +5,7 @@ class RedisPurpose(StrEnum):
     AUTH = "auth"
     EMAIL = "email"
     STEAM = "steam"
+    SUPPORT = "support"
 
 
 class LoginProvider(StrEnum):

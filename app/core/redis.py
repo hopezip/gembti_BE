@@ -11,6 +11,7 @@ def get_redis_url(purpose: RedisPurpose) -> str:
         RedisPurpose.AUTH: settings.REDIS_AUTH_URL,
         RedisPurpose.EMAIL: settings.REDIS_EMAIL_URL,
         RedisPurpose.STEAM: settings.REDIS_STEAM_URL,
+        RedisPurpose.SUPPORT: settings.REDIS_URL,
     }
     return purpose_urls[purpose] or settings.REDIS_URL
 
