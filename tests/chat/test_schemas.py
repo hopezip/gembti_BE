@@ -21,7 +21,7 @@ def test_support_chat_message_request_rejects_extra_fields() -> None:
     with pytest.raises(ValidationError):
         SupportChatMessageRequest(
             message="비정상 필드",
-            category_hint="steam",
+            category_hint="steam",  # type: ignore[call-arg]
         )
 
 
@@ -30,7 +30,7 @@ def test_support_chat_final_payload_accepts_citations() -> None:
         session_id="abc-123",
         answer="steam 연동은 프로필 공개 범위를 확인해 주세요.",
         citations=[
-            {
+            {  # type: ignore[list-item]
                 "document_id": 1,
                 "title": "steam 연동 도움말",
                 "chunk_id": 17,
@@ -53,7 +53,7 @@ def test_support_chat_final_payload_rejects_extra_fields() -> None:
             answer="답변",
             citations=[],
             fallback_used=False,
-            debug_prompt="내부 프롬프트",
+            debug_prompt="내부 프롬프트",  # type: ignore[call-arg]
         )
 
 

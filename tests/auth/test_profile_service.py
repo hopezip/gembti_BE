@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import service
 from app.auth.models import Gender, LoginProvider, UserStatus
 from app.auth.schemas import ProfileUpdateRequest
+
+if TYPE_CHECKING:
+    from app.steam.models import UserLibraryGame
 
 
 @pytest.mark.asyncio
@@ -86,7 +89,9 @@ def test_build_library_game_response_uses_fallback_title_without_game() -> None:
         synced_at=datetime(2026, 6, 15, tzinfo=UTC),
     )
 
-    response = service.build_library_game_response(library_game, None)
+    response = service.build_library_game_response(
+        cast("UserLibraryGame", library_game), None
+    )
 
     assert response.title == "Steam App 123"
     assert response.playtime_hours == 1.5

@@ -19,8 +19,8 @@ docker exec gembti_app python scripts/refilter_adult_games.py --dry-run
 from __future__ import annotations
 
 import asyncio
-import sys
 from pathlib import Path
+import sys
 
 import click
 from sqlalchemy import select
@@ -28,8 +28,8 @@ from sqlalchemy import select
 _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT))
 
-import app.core.model_registry as _model_registry  # noqa: E402, F401
 from app.core.database import AsyncSessionLocal  # noqa: E402
+import app.core.model_registry as _model_registry  # noqa: E402, F401
 from app.game.models import Game  # noqa: E402
 from app.game.service import _is_adult_game  # noqa: E402
 

@@ -233,7 +233,7 @@ async def test_create_support_chat_message_passes_recent_turns_to_answer_generat
         assistant_answer="hi-2",
     )
 
-    captured = {}
+    captured: dict[str, object] = {}
 
     async def fake_generate_answer(message: str, recent_turns: list[dict[str, str]]) -> str:
         captured["message"] = message
@@ -267,7 +267,7 @@ async def test_create_support_chat_message_uses_empty_recent_turns_when_session_
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     expired_session_id = "expired-session-id"
-    captured = {}
+    captured: dict[str, object] = {}
 
     async def fake_generate_answer(
         message: str,
