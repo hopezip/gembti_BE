@@ -207,6 +207,11 @@ async def update_me_api(
     user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
+    """현재 사용자 프로필 수정 요청을 서비스 계층으로 위임한다.
+
+    FastAPI가 request body 검증, 로그인 사용자 식별, DB 세션 주입을 처리하고,
+    닉네임 중복 확인과 실제 프로필 수정은 service.update_me에서 담당한다.
+    """
     return await update_me(db, user_id, request)
 
 
