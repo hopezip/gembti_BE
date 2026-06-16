@@ -1,4 +1,3 @@
-# games 저장/조회
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -52,8 +51,6 @@ async def upsert_game(session: AsyncSession, game_data: dict) -> None:
     await session.execute(stmt)
 
 
-# ── 검색/조회 ─────────────────────────────────────────────────────────────────
-
 _PAGE_SIZE = 12
 
 
@@ -86,8 +83,6 @@ async def search_games(
             )
         )
 
-    # 장르 필터: 선택한 장르 각각을 AND로 적용, 동일 의미 DB 값은 OR
-    # JSON이 유니코드 이스케이프로 저장되므로 json_array_elements_text로 실제 텍스트 비교
     for i, db_vals in enumerate(filter_genres or []):
         or_parts = [
             text(
@@ -98,7 +93,6 @@ async def search_games(
         ]
         conds.append(or_(*or_parts))
 
-    # 카테고리(상위) 필터: 선택한 카테고리 각각을 AND로 적용, 동일 의미 DB 값은 OR
     for i, db_vals in enumerate(filter_categories or []):
         or_parts = [
             text(
@@ -121,7 +115,7 @@ async def search_games(
         order_by = [Game.price_krw.desc().nulls_last()]
     elif sort == "release_date":
         order_by = [Game.release_date.desc().nulls_last()]
-    else:  # popular
+    else:
         order_by = [Game.review_count.desc().nulls_last(), Game.review_score.desc().nulls_last()]
 
     offset = (page - 1) * _PAGE_SIZE
