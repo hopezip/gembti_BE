@@ -16,6 +16,14 @@ STEAM_RECENTLY_PLAYED_URL = (
     "https://api.steampowered.com/IPlayerService/GetRecentlyPlayedGames/v0001/"
 )
 STEAM_API_TIMEOUT_SECONDS = 30.0
+STEAM_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/149.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json,text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+}
 
 
 class SteamLibraryVisibility(StrEnum):
@@ -57,7 +65,11 @@ async def verify_steam_openid(params: dict[str, str]) -> bool:
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
-            response = await client.post(STEAM_OPENID_URL, data=payload)
+            response = await client.post(
+                STEAM_OPENID_URL,
+                data=payload,
+                headers=STEAM_HEADERS,
+            )
             response.raise_for_status()
         except httpx.HTTPError:
             return False
@@ -75,7 +87,11 @@ async def get_player_summary(steam_id_64: int) -> dict[str, Any] | None:
     }
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
-            response = await client.get(STEAM_PLAYER_SUMMARIES_URL, params=params)
+            response = await client.get(
+                STEAM_PLAYER_SUMMARIES_URL,
+                params=params,
+                headers=STEAM_HEADERS,
+            )
             response.raise_for_status()
         except httpx.HTTPError:
             return None
@@ -103,7 +119,11 @@ async def get_owned_games(steam_id_64: int) -> SteamOwnedGamesResult:
     }
     async with httpx.AsyncClient(timeout=STEAM_API_TIMEOUT_SECONDS) as client:
         try:
-            response = await client.get(STEAM_OWNED_GAMES_URL, params=params)
+            response = await client.get(
+                STEAM_OWNED_GAMES_URL,
+                params=params,
+                headers=STEAM_HEADERS,
+            )
             response.raise_for_status()
             payload = response.json()
         except (httpx.HTTPError, ValueError):
@@ -131,7 +151,11 @@ async def get_recently_played_games(steam_id_64: int) -> SteamRecentlyPlayedResu
     }
     async with httpx.AsyncClient(timeout=STEAM_API_TIMEOUT_SECONDS) as client:
         try:
-            response = await client.get(STEAM_RECENTLY_PLAYED_URL, params=params)
+            response = await client.get(
+                STEAM_RECENTLY_PLAYED_URL,
+                params=params,
+                headers=STEAM_HEADERS,
+            )
             response.raise_for_status()
             payload = response.json()
         except (httpx.HTTPError, ValueError):
