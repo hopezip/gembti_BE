@@ -8,7 +8,7 @@ import math
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Awaitable, Iterable, Sequence
 
 from app.chat.infrastructure.embedding import (
     EmbeddingResponseError,
@@ -20,6 +20,10 @@ from app.chat.rag.model import (
     RetrievalResult,
     parse_chat_chunk_source,
 )
+
+if TYPE_CHECKING:
+    VectorSearchResult = list[RetrievalResult] | Awaitable[list[RetrievalResult]]
+    VectorUpsertResult = None | Awaitable[None]
 
 DEFAULT_SCORE_THRESHOLD = 0.0
 
@@ -56,10 +60,10 @@ class ChatChunkVectorStore(Protocol):
         *,
         top_k: int = 3,
         category_hint: str | None = None,
-    ) -> list[RetrievalResult]:
+    ) -> VectorSearchResult:
         """유사도 상위 ``chat_chunk`` 벡터 히트를 반환한다."""
 
-    def upsert(self, entries: Iterable[ChatChunkVectorWrite]) -> None:
+    def upsert(self, entries: Iterable[ChatChunkVectorWrite]) -> VectorUpsertResult:
         """임베딩된 청크를 지식 벡터 저장소에 삽입하거나 갱신(upsert)한다."""
 
 
@@ -145,38 +149,102 @@ class PgvectorChatChunkVectorStore:
         if include_category_hint:
             category_clause = "\n  AND source LIKE :source_prefix"
         return f"""
-SELECT id, content, source, 1 - (embedding_vector <=> :query_embedding) AS score
+SELECT id, content, source, 1 - (embedding_vector <=> CAST(:query_embedding AS vector)) AS score
 FROM chat_chunk
-WHERE 1 - (embedding_vector <=> :query_embedding) >= :score_threshold{category_clause}
-ORDER BY embedding_vector <=> :query_embedding
+WHERE embedding_vector IS NOT NULL
+  AND source IS NOT NULL
+  AND 1 - (embedding_vector <=> CAST(:query_embedding AS vector)) >= :score_threshold{category_clause}
+ORDER BY embedding_vector <=> CAST(:query_embedding AS vector)
 LIMIT :top_k
 """.strip()
 
     @staticmethod
-    def build_upsert_query() -> str:
-        """``chat_chunk`` 행 삽입·갱신용 최소 insert/upsert SQL을 만든다."""
+    def build_delete_by_source_query() -> str:
+        """명세에 없는 unique 제약 없이 ``source`` 기준 기존 행을 제거한다."""
+
+        return """
+DELETE FROM chat_chunk
+WHERE source = :source
+""".strip()
+
+    @staticmethod
+    def build_insert_query() -> str:
+        """``chat_chunk`` 행 삽입 SQL을 만든다."""
 
         return """
 INSERT INTO chat_chunk (content, embedding_vector, source)
-VALUES (:content, :embedding_vector, :source)
-ON CONFLICT (source) DO UPDATE SET
-  content = EXCLUDED.content,
-  embedding_vector = EXCLUDED.embedding_vector
+VALUES (:content, CAST(:embedding_vector AS vector), :source)
 """.strip()
 
-    def upsert(self, entries: Iterable[ChatChunkVectorWrite]) -> None:
-        query = _sql_text(self.build_upsert_query())
+    def upsert(self, entries: Iterable[ChatChunkVectorWrite]) -> VectorUpsertResult:
+        delete_query = _sql_text(self.build_delete_by_source_query())
+        insert_query = _sql_text(self.build_insert_query())
         for entry in entries:
+            self._session.execute(delete_query, {"source": entry.source})
             self._session.execute(
-                query,
+                insert_query,
                 {
                     "content": entry.content,
                     "source": entry.source,
-                    "embedding_vector": list(entry.embedding_vector),
+                    "embedding_vector": _pgvector_literal(entry.embedding_vector),
+                },
+            )
+        return None
+
+    def search(
+        self,
+        query_embedding: Sequence[float],
+        *,
+        top_k: int = 3,
+        category_hint: str | None = None,
+    ) -> VectorSearchResult:
+        _validate_top_k(top_k)
+        query_vector = validate_embedding_dimensions(
+            query_embedding,
+            expected_dimensions=CHAT_CHUNK_EMBEDDING_DIMENSIONS,
+        )
+        query = _sql_text(
+            self.build_similarity_query(include_category_hint=category_hint is not None)
+        )
+        params: dict[str, Any] = {
+            "query_embedding": _pgvector_literal(query_vector),
+            "score_threshold": self.score_threshold,
+            "top_k": top_k,
+        }
+        if category_hint is not None:
+            params["source_prefix"] = f"support.{category_hint}%#chunk-%"
+        rows = self._session.execute(query, params)
+        return [
+            RetrievalResult(
+                chunk=ChatChunkHit(
+                    id=int(_row_value(row, "id")),
+                    content=_row_value(row, "content"),
+                    source=_row_value(row, "source"),
+                ),
+                score=float(_row_value(row, "score")),
+            )
+            for row in rows
+        ]
+
+
+class AsyncPgvectorChatChunkVectorStore(PgvectorChatChunkVectorStore):
+    """비동기 SQLAlchemy 세션으로 ``chat_chunk`` pgvector를 조회·저장하는 어댑터."""
+
+    async def upsert(self, entries: Iterable[ChatChunkVectorWrite]) -> None:
+        delete_query = _sql_text(self.build_delete_by_source_query())
+        insert_query = _sql_text(self.build_insert_query())
+        for entry in entries:
+            await self._session.execute(delete_query, {"source": entry.source})
+            await self._session.execute(
+                insert_query,
+                {
+                    "content": entry.content,
+                    "source": entry.source,
+                    "embedding_vector": _pgvector_literal(entry.embedding_vector),
                 },
             )
 
-    def search(
+    async def search(
         self,
         query_embedding: Sequence[float],
         *,
@@ -192,16 +260,17 @@ ON CONFLICT (source) DO UPDATE SET
             self.build_similarity_query(include_category_hint=category_hint is not None)
         )
         params: dict[str, Any] = {
-            "query_embedding": query_vector,
+            "query_embedding": _pgvector_literal(query_vector),
             "score_threshold": self.score_threshold,
             "top_k": top_k,
         }
         if category_hint is not None:
             params["source_prefix"] = f"support.{category_hint}%#chunk-%"
-        rows = self._session.execute(query, params)
+        rows = await self._session.execute(query, params)
         return [
             RetrievalResult(
                 chunk=ChatChunkHit(
+                    id=int(_row_value(row, "id")),
                     content=_row_value(row, "content"),
                     source=_row_value(row, "source"),
                 ),
@@ -235,6 +304,14 @@ def _normalized_cosine(left: Sequence[float], right: Sequence[float]) -> float:
     return max(0.0, min(1.0, (cosine + 1.0) / 2.0))
 
 
+def _pgvector_literal(vector: Sequence[float]) -> str:
+    normalized = validate_embedding_dimensions(
+        vector,
+        expected_dimensions=CHAT_CHUNK_EMBEDDING_DIMENSIONS,
+    )
+    return f"[{','.join(str(value) for value in normalized)}]"
+
+
 def _sql_text(sql: str) -> Any:
     try:
         sqlalchemy = importlib.import_module("sqlalchemy")
@@ -253,6 +330,7 @@ def _row_value(row: Any, key: str) -> Any:
 
 
 __all__ = [
+    "AsyncPgvectorChatChunkVectorStore",
     "CHAT_CHUNK_EMBEDDING_DIMENSIONS",
     "ChatChunkVectorStore",
     "ChatChunkVectorWrite",

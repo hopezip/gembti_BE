@@ -236,6 +236,7 @@ class ChatChunkHit:
 
     content: str
     source: str
+    id: int | None = None
     citation: CitationMetadata | None = None
     parsed_source: ParsedChunkSource = field(init=False, repr=False, compare=False)
 
@@ -243,6 +244,8 @@ class ChatChunkHit:
         content = self.content.strip()
         if not content:
             raise ValueError("retrieved chat_chunk content must not be blank")
+        if self.id is not None and self.id <= 0:
+            raise ValueError("retrieved chat_chunk id must be positive")
         parsed = parse_chat_chunk_source(self.source)
         object.__setattr__(self, "source", parsed.source)
         object.__setattr__(self, "parsed_source", parsed)
