@@ -30,14 +30,13 @@ async def get_latest_user_stats(db: AsyncSession, user_id: int) -> UserStats | N
 
 async def get_recommendable_games(
     db: AsyncSession,
-    candidate_limit: int = 500,
     excluded_app_ids: Sequence[int] | None = None,
 ) -> list[Game]:
     query = select(Game).where(Game.is_active.is_(True))
     if excluded_app_ids:
         query = query.where(Game.app_id.not_in(excluded_app_ids))
 
-    result = await db.execute(query.order_by(Game.id).limit(candidate_limit))
+    result = await db.execute(query.order_by(Game.id))
     return list(result.scalars().all())
 
 
