@@ -43,15 +43,12 @@ class PriceInfoResponse(BaseModel):
     discount_rate: int
 
 
-# ── 검색 ─────────────────────────────────────────────────────────────────────
-
-
 class GameSearchItemResponse(BaseModel):
     game_id: int
     title: str
     thumbnail_url: str | None
-    categories: list[str]  # 상위 필터: 싱글플레이어·협동·멀티플레이어 등
-    genres: list[str]  # 하위 필터: 액션·RPG·전략 등
+    categories: list[str]
+    genres: list[str]
     rating: float | None
     price_info: PriceInfoResponse
 
@@ -75,9 +72,6 @@ class TrendingGamesResponse(BaseModel):
 class NewReleasesResponse(BaseModel):
     status: str = "SUCCESS"
     data: list[HomeGameItem]
-
-
-# ── 게임 상세 ──────────────────────────────────────────────────────────────────
 
 
 class SystemSpecResponse(BaseModel):

@@ -69,6 +69,7 @@ jobs:
             cd ~/gembti_BE
             docker compose pull
             docker compose up -d
+            docker compose restart nginx
             docker image prune -af
 
       - name: Security Group에서 IP 제거
