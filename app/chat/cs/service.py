@@ -1,15 +1,26 @@
-from dataclasses import dataclass
 import json
 from typing import Any, cast
 from uuid import uuid4
 
-from app.chat.infrastructure.llm import FALLBACK_ANSWER
-from app.chat.schemas import (
-    SupportChatCitation,
-    SupportChatFinalPayload,
-    SupportChatMessageRequest,
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.chat.infrastructure.embedding import (
+    EmbeddingConfigurationError,
+    EmbeddingResponseError,
+    OpenAIEmbeddingClient,
 )
+from app.chat.infrastructure.llm import (
+    FALLBACK_ANSWER,
+    LlmConfigurationError,
+    LlmResponseError,
+    OpenAIChatResponder,
+)
+from app.chat.infrastructure.vector_store import AsyncPgvectorChatChunkVectorStore
+from app.chat.rag.model import SUPPORT_RAG_SETTINGS
+from app.chat.rag.service import SupportRagAnswer, generate_support_rag_answer
+from app.chat.schemas import SupportChatFinalPayload, SupportChatMessageRequest
 from app.core.config import settings
+from app.core.database import AsyncSessionLocal
 from app.core.enums import RedisPurpose
 from app.core.exceptions import BadRequestException
 from app.core.redis import get_redis
@@ -111,25 +122,35 @@ def validate_support_chat_message_request(request: SupportChatMessageRequest) ->
         raise BadRequestException("session_id 형식이 올바르지 않습니다.")
 
 
-@dataclass(frozen=True)
-class SupportChatAnswer:
-    answer: str
-    citations: list[SupportChatCitation]
-    fallback_used: bool
-
-
 async def generate_support_chat_answer(
     message: str,
     recent_turns: list[dict[str, str]],
-) -> SupportChatAnswer | str:
-    # PR 1에서는 세션/API 계약만 고정한다.
-    # 실제 RAG 답변 생성은 후속 PR에서 이 함수 내부 구현만 교체한다.
-    _ = build_support_chat_question(message, recent_turns)
-    return SupportChatAnswer(
-        answer=FALLBACK_ANSWER,
-        citations=[],
-        fallback_used=True,
-    )
+) -> SupportRagAnswer | str:
+    question = build_support_chat_question(message, recent_turns)
+    try:
+        async with AsyncSessionLocal() as db:
+            return await generate_support_rag_answer(
+                message=question,
+                embedding_client=OpenAIEmbeddingClient.from_env(),
+                vector_store=AsyncPgvectorChatChunkVectorStore(
+                    db,
+                    score_threshold=SUPPORT_RAG_SETTINGS.score_threshold,
+                ),
+                responder=OpenAIChatResponder.from_env(),
+            )
+    except (
+        EmbeddingConfigurationError,
+        EmbeddingResponseError,
+        LlmConfigurationError,
+        LlmResponseError,
+        SQLAlchemyError,
+        ValueError,
+    ):
+        return SupportRagAnswer(
+            answer=FALLBACK_ANSWER,
+            citations=[],
+            fallback_used=True,
+        )
 
 
 async def create_support_chat_message(
