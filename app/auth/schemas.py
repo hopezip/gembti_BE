@@ -8,6 +8,8 @@ from app.auth.models import EmailVerificationPurpose
 from app.auth.password_policy import validate_password_policy
 from app.core.enums import Gender, LoginProvider, UserStatus
 
+BIRTH_DATE_MIN = date(1900, 1, 1)
+
 
 class EmailCodeSendRequest(BaseModel):
     email: EmailStr
@@ -80,6 +82,13 @@ def normalize_birth_date_value(value: object) -> object:
     return normalized
 
 
+def validate_birth_date_range(birth_date: date | None) -> None:
+    if birth_date is None:
+        return
+    if birth_date < BIRTH_DATE_MIN or birth_date > date.today():
+        raise ValueError("생년월일이 올바르지 않습니다.")
+
+
 class SignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=10, max_length=100)
@@ -108,6 +117,7 @@ class SignupRequest(BaseModel):
 
         if not re.fullmatch(r"[가-힣A-Za-z0-9]+", self.nickname):
             raise ValueError("닉네임에는 특수문자를 사용할 수 없습니다.")
+        validate_birth_date_range(self.birth_date)
         if not self.age_confirmed:
             raise ValueError("만 15세 이상만 가입할 수 있습니다.")
         return self
@@ -154,10 +164,16 @@ class ProfileUpdateRequest(BaseModel):
             return value.lower()
         return value
 
+    @field_validator("birth_date", mode="before")
+    @classmethod
+    def normalize_birth_date(cls, value: object) -> object:
+        return normalize_birth_date_value(value)
+
     @model_validator(mode="after")
     def validate_profile_update(self) -> "ProfileUpdateRequest":
         if not self.model_fields_set:
             raise ValueError("수정할 프로필 항목이 필요합니다.")
+        validate_birth_date_range(self.birth_date)
         return self
 
 
@@ -240,6 +256,20 @@ class UserActivityResponse(BaseModel):
     total_playtime_minutes: int
     total_playtime_hours: float
     recent_games: list[SteamLibraryGameResponse] = Field(default_factory=list)
+
+
+class ProfileResponse(BaseModel):
+    user_id: int
+    email: str
+    nickname: str
+    bio: str | None = None
+    gender: Gender | None = None
+    birth_date: date | None = None
+
+
+class ProfileUpdateResponse(BaseModel):
+    message: str = "프로필이 수정되었습니다."
+    profile: ProfileResponse
 
 
 class AccessTokenResponse(BaseModel):

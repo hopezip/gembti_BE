@@ -68,12 +68,19 @@ async def test_steam_link_queues_library_sync_after_commit(
             steam_sync_status=SteamSyncStatus.FAILED,
         )
 
-    def enqueue_steam_library_sync(user_id: int) -> str:
+    async def enqueue_steam_library_sync_if_due(
+        user_id: int,
+        last_synced_at: object,
+    ) -> str:
         queued_user_ids.append(user_id)
         return "task-id"
 
     monkeypatch.setattr(router, "link_steam_account", link_steam_account)
-    monkeypatch.setattr(router, "enqueue_steam_library_sync", enqueue_steam_library_sync)
+    monkeypatch.setattr(
+        router,
+        "enqueue_steam_library_sync_if_due",
+        enqueue_steam_library_sync_if_due,
+    )
 
     db = FakeSession()
     response = await router.steam_link_api(
