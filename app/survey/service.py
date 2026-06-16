@@ -2,8 +2,17 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestException, NotFoundException
-from app.stat.calculator import calculate_user_stats
-from app.stat.repository import create_user_stats, get_latest_user_stats
+from app.stat.calculator import (
+    calculate_steam_stats_from_vectors,
+    calculate_user_stats,
+    merge_survey_and_steam_stats,
+)
+from app.stat.models import StatSourceType
+from app.stat.repository import (
+    create_user_stats,
+    get_latest_user_stats,
+    get_user_steam_game_trait_vectors,
+)
 from app.survey.repository import get_active_questions
 
 ANSWER_SCORE_MAP = {
@@ -56,15 +65,29 @@ async def submit_survey(db, request, user_id: int):
         answers_by_question_id=answers_by_question_id,
     )
 
+    steam_vectors = await get_user_steam_game_trait_vectors(db, user_id)
+    steam_stats = calculate_steam_stats_from_vectors(steam_vectors)
+
+    source_type = StatSourceType.ONLY_SURVEY
+    final_stats = stats
+
+    if steam_stats is not None:
+        final_stats = merge_survey_and_steam_stats(
+            survey_stats=stats,
+            steam_stats=steam_stats,
+        )
+        source_type = StatSourceType.HYBRID_STEAM
+
     user_stats = await create_user_stats(
         db=db,
         user_id=user_id,
-        stats=stats,
+        stats=final_stats,
+        source_type=source_type,
     )
     await db.commit()
     await db.refresh(user_stats)
 
-    return user_stats, stats
+    return user_stats, final_stats
 
 
 async def get_latest_survey_result(db: AsyncSession, user_id: int):
