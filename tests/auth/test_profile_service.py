@@ -89,9 +89,7 @@ def test_build_library_game_response_uses_fallback_title_without_game() -> None:
         synced_at=datetime(2026, 6, 15, tzinfo=UTC),
     )
 
-    response = service.build_library_game_response(
-        cast("UserLibraryGame", library_game), None
-    )
+    response = service.build_library_game_response(cast("UserLibraryGame", library_game), None)
 
     assert response.title == "Steam App 123"
     assert response.playtime_hours == 1.5
