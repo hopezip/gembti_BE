@@ -44,3 +44,37 @@ def calculate_user_stats(
         counts[axis] += 1
 
     return {axis: normalize_score(raw_scores[axis], counts[axis]) for axis in AXES}
+
+
+def calculate_steam_stats_from_vectors(vectors: list[list[float]]) -> dict[str, int] | None:
+    if not vectors:
+        return None
+
+    axis_totals = dict.fromkeys(AXES, 0.0)
+
+    for vector in vectors:
+        if len(vector) != len(AXES):
+            continue
+
+        for index, axis in enumerate(AXES):
+            axis_totals[axis] += float(vector[index])
+
+    axis_averages = {axis: axis_totals[axis] / len(vectors) for axis in AXES}
+
+    max_score = max(axis_averages.values())
+    if max_score <= 0:
+        return dict.fromkeys(AXES, 50)
+
+    return {axis: round((axis_averages[axis] / max_score) * 100) for axis in AXES}
+
+
+def merge_survey_and_steam_stats(
+    survey_stats: dict[str, int],
+    steam_stats: dict[str, int],
+    survey_weight: float = 0.5,
+    steam_weight: float = 0.5,
+) -> dict[str, int]:
+    return {
+        axis: round((survey_stats[axis] * survey_weight) + (steam_stats[axis] * steam_weight))
+        for axis in AXES
+    }
