@@ -12,6 +12,7 @@ from app.auth.schemas import (
     NicknameCheckResponse,
     PasswordResetRequest,
     ProfileUpdateRequest,
+    ProfileUpdateResponse,
     SignupRequest,
     UserActivityResponse,
     UserResponse,
@@ -193,7 +194,7 @@ async def me_api(
 
 @router.patch(
     "/profile",
-    response_model=UserResponse,
+    response_model=ProfileUpdateResponse,
     responses={
         400: _err("수정할 프로필 항목이 필요합니다."),
         401: _err("인증 실패"),
@@ -206,7 +207,7 @@ async def update_me_api(
     request: ProfileUpdateRequest,
     user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
-) -> UserResponse:
+) -> ProfileUpdateResponse:
     """현재 사용자 프로필 수정 요청을 서비스 계층으로 위임한다.
 
     FastAPI가 request body 검증, 로그인 사용자 식별, DB 세션 주입을 처리하고,

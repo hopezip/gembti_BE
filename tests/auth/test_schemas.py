@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 from pydantic import ValidationError
 import pytest
 
@@ -6,6 +8,7 @@ from app.auth.schemas import (
     EmailCodeSendRequest,
     EmailCodeVerifyRequest,
     PasswordResetRequest,
+    ProfileUpdateRequest,
     SignupRequest,
 )
 from app.core.enums import Gender
@@ -97,6 +100,41 @@ def test_signup_schema_rejects_invalid_request(field: str, value: object) -> Non
 
     with pytest.raises(ValidationError):
         SignupRequest.model_validate(data)
+
+
+@pytest.mark.parametrize("birth_date", ["1000-01-01", date.today() + timedelta(days=1)])
+def test_signup_schema_rejects_invalid_birth_date(birth_date: object) -> None:
+    data = valid_signup_data()
+    data["birth_date"] = birth_date
+
+    with pytest.raises(ValidationError) as exc_info:
+        SignupRequest.model_validate(data)
+
+    assert "생년월일이 올바르지 않습니다." in str(exc_info.value)
+
+
+@pytest.mark.parametrize("birth_date", ["1000-01-01", date.today() + timedelta(days=1)])
+def test_steam_complete_signup_schema_rejects_invalid_birth_date(birth_date: object) -> None:
+    with pytest.raises(ValidationError) as exc_info:
+        SteamCompleteSignupRequest.model_validate(
+            {
+                "signup_token": "steam_signup_token",
+                "email": "steam@example.com",
+                "nickname": "스팀유저",
+                "age_confirmed": True,
+                "birth_date": birth_date,
+            }
+        )
+
+    assert "생년월일이 올바르지 않습니다." in str(exc_info.value)
+
+
+@pytest.mark.parametrize("birth_date", ["1000-01-01", date.today() + timedelta(days=1)])
+def test_profile_update_schema_rejects_invalid_birth_date(birth_date: object) -> None:
+    with pytest.raises(ValidationError) as exc_info:
+        ProfileUpdateRequest.model_validate({"birth_date": birth_date})
+
+    assert "생년월일이 올바르지 않습니다." in str(exc_info.value)
 
 
 def test_signup_schema_reports_all_missing_password_parts() -> None:

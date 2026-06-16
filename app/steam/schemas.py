@@ -2,7 +2,12 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
-from app.auth.schemas import AuthUserResponse, normalize_birth_date_value, normalize_gender_value
+from app.auth.schemas import (
+    AuthUserResponse,
+    normalize_birth_date_value,
+    normalize_gender_value,
+    validate_birth_date_range,
+)
 from app.core.enums import Gender
 from app.steam.models import SteamSyncStatus
 
@@ -44,6 +49,7 @@ class SteamCompleteSignupRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_age_confirmation(self) -> "SteamCompleteSignupRequest":
+        validate_birth_date_range(self.birth_date)
         if not self.age_confirmed:
             raise ValueError("만 15세 이상만 가입할 수 있습니다.")
         return self

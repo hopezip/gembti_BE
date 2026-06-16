@@ -93,16 +93,16 @@ async def get_steam_login_result(
     db: AsyncSession,
     steam_id_64: int,
     avatar_url: str | None = None,
-) -> tuple[User | None, bool, str | None]:
+) -> tuple[User | None, bool, str | None, SteamAccount | None]:
     steam_account = await get_steam_account_by_steam_id(db, steam_id_64)
     if steam_account is not None:
         user = steam_account.user
         steam_account.avatar_url = avatar_url or steam_account.avatar_url
         await db.flush()
-        return user, False, None
+        return user, False, None, steam_account
 
     signup_token = await create_steam_signup_session(steam_id_64, avatar_url)
-    return None, True, signup_token
+    return None, True, signup_token, None
 
 
 async def create_unique_steam_nickname(db: AsyncSession, steam_id_64: int) -> str:
@@ -126,7 +126,7 @@ async def complete_steam_login(
     profile = await get_player_summary(steam_id_64)
     avatar_url = None if profile is None else profile.get("avatarfull")
 
-    user, is_new_user, signup_token = await get_steam_login_result(
+    user, is_new_user, signup_token, steam_account = await get_steam_login_result(
         db=db,
         steam_id_64=steam_id_64,
         avatar_url=avatar_url,
@@ -134,6 +134,13 @@ async def complete_steam_login(
     if user is not None:
         await db.commit()
         await issue_auth_tokens(response, user)
+        if steam_account is not None:
+            from app.steam.tasks import enqueue_steam_library_sync_if_due
+
+            await enqueue_steam_library_sync_if_due(
+                user_id=user.id,
+                last_synced_at=steam_account.last_synced_at,
+            )
     return user, is_new_user, signup_token
 
 

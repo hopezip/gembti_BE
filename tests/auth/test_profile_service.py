@@ -155,8 +155,10 @@ async def test_update_me_updates_profile_and_returns_latest_profile(
     assert user.nickname == "newname"
     assert user.bio == "hello"
     assert user.gender == Gender.OTHER
-    assert response.nickname == "newname"
-    assert response.steam_library.library_game_count == 0
+    assert response.message == "프로필이 수정되었습니다."
+    assert response.profile.nickname == "newname"
+    assert response.profile.bio == "hello"
+    assert response.profile.gender == Gender.OTHER
 
 
 @pytest.mark.asyncio
