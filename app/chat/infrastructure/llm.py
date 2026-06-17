@@ -4,7 +4,7 @@ import importlib
 import os
 from typing import TYPE_CHECKING, Any, Protocol
 
-from app.chat.cs.prompt import SUPPORT_ANSWER_POLICY
+from app.chat.cs.prompt import SUPPORT_ANSWER_POLICY, SUPPORT_ANSWER_USER_PROMPT_TEMPLATE
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterator
@@ -171,14 +171,10 @@ def _build_chat_messages(
     messages.append(
         {
             "role": "user",
-            "content": f"근거:\n{context}",
-        }
-    )
-
-    messages.append(
-        {
-            "role": "user",
-            "content": question,
+            "content": SUPPORT_ANSWER_USER_PROMPT_TEMPLATE.format(
+                retrieved_chunks=context,
+                user_query=question,
+            ),
         }
     )
 
