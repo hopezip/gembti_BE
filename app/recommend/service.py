@@ -73,10 +73,10 @@ def calculate_recommendation_sort_score(
     current_players_score = normalize_count_score(game.current_players)
 
     return (
-        similarity_score * 0.70
-        + review_score * 0.15
-        + review_count_score * 0.10
-        + current_players_score * 0.05
+        similarity_score * 0.55
+        + review_score * 0.10
+        + review_count_score * 0.20
+        + current_players_score * 0.15
     )
 
 
