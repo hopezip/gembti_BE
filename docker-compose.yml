@@ -60,7 +60,7 @@ services:
     image: ${DOCKERHUB_USERNAME}/gembti-be:dev
     container_name: gembti_celery
     restart: unless-stopped
-    command: celery -A app.core.celery_app worker --beat --loglevel=info --concurrency=1
+    command: celery -A app.core.celery_app worker --beat --loglevel=info --concurrency=1 --schedule=/tmp/celerybeat-schedule
     env_file: .env
     depends_on:
       postgres:
