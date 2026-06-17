@@ -32,8 +32,9 @@ from app.steam.schemas import (
     SteamSyncResponse,
 )
 from app.steam.signup_store import (
+    consume_steam_connect_session,
     consume_steam_signup_session,
-    create_steam_signup_session,
+    create_steam_connect_session,
 )
 
 if TYPE_CHECKING:
@@ -71,6 +72,20 @@ def build_steam_login_url() -> str:
     )
 
 
+def get_steam_connect_return_to(connect_token: str) -> str:
+    return (
+        f"{settings.BACKEND_BASE_URL.rstrip('/')}"
+        f"/api/v1/steam/connect/callback?state={connect_token}"
+    )
+
+
+def build_steam_connect_url(connect_token: str) -> str:
+    return build_steam_openid_url(
+        return_to=get_steam_connect_return_to(connect_token),
+        realm=get_steam_realm(),
+    )
+
+
 def extract_steam_id_64(params: dict[str, str]) -> int:
     claimed_id = params.get("openid.claimed_id")
     if claimed_id is None:
@@ -93,16 +108,34 @@ async def get_steam_login_result(
     db: AsyncSession,
     steam_id_64: int,
     avatar_url: str | None = None,
-) -> tuple[User | None, bool, str | None, SteamAccount | None]:
+) -> tuple[User, bool, SteamAccount]:
     steam_account = await get_steam_account_by_steam_id(db, steam_id_64)
     if steam_account is not None:
         user = steam_account.user
         steam_account.avatar_url = avatar_url or steam_account.avatar_url
         await db.flush()
-        return user, False, None, steam_account
+        return user, False, steam_account
 
-    signup_token = await create_steam_signup_session(steam_id_64, avatar_url)
-    return None, True, signup_token, None
+    user = User(
+        email=f"steam_{steam_id_64}@steam.local",
+        password_hash=None,
+        nickname=await create_unique_steam_nickname(db, steam_id_64),
+        login_provider=LoginProvider.STEAM,
+        status=UserStatus.ACTIVE,
+    )
+    db.add(user)
+    await db.flush()
+
+    steam_account = await save_steam_account(
+        db,
+        SteamAccount(
+            user_id=user.id,
+            steam_id_64=steam_id_64,
+            avatar_url=avatar_url,
+            steam_sync_status=SteamSyncStatus.FAILED,
+        ),
+    )
+    return user, True, steam_account
 
 
 async def create_unique_steam_nickname(db: AsyncSession, steam_id_64: int) -> str:
@@ -121,27 +154,56 @@ async def complete_steam_login(
     db: AsyncSession,
     response: Response,
     params: dict[str, str],
-) -> tuple[User | None, bool, str | None]:
+) -> tuple[User, bool]:
     steam_id_64 = await verify_and_extract_steam_id(params)
     profile = await get_player_summary(steam_id_64)
     avatar_url = None if profile is None else profile.get("avatarfull")
 
-    user, is_new_user, signup_token, steam_account = await get_steam_login_result(
+    user, is_new_user, steam_account = await get_steam_login_result(
         db=db,
         steam_id_64=steam_id_64,
         avatar_url=avatar_url,
     )
-    if user is not None:
-        await db.commit()
-        await issue_auth_tokens(response, user)
-        if steam_account is not None:
-            from app.steam.tasks import enqueue_steam_library_sync_if_due
+    await db.commit()
+    await issue_auth_tokens(response, user)
 
-            await enqueue_steam_library_sync_if_due(
-                user_id=user.id,
-                last_synced_at=steam_account.last_synced_at,
-            )
-    return user, is_new_user, signup_token
+    from app.steam.tasks import enqueue_steam_library_sync_if_due
+
+    await enqueue_steam_library_sync_if_due(
+        user_id=user.id,
+        last_synced_at=steam_account.last_synced_at,
+    )
+    return user, is_new_user
+
+
+async def start_steam_connect(user_id: int) -> str:
+    connect_token = await create_steam_connect_session(user_id)
+    return build_steam_connect_url(connect_token)
+
+
+async def complete_steam_connect(
+    db: AsyncSession,
+    state: str | None,
+    params: dict[str, str],
+) -> SteamLinkResponse:
+    if state is None:
+        raise BadRequestException("Steam 연동 세션 정보가 없습니다.")
+
+    user_id = await consume_steam_connect_session(state)
+    if user_id is None:
+        raise BadRequestException("Steam 연동 세션이 만료되었거나 유효하지 않습니다.")
+
+    steam_id_64 = await verify_and_extract_steam_id(params)
+    response = await link_steam_account(db, user_id, str(steam_id_64))
+    await db.commit()
+
+    from app.steam.tasks import enqueue_steam_library_sync_if_due
+
+    await enqueue_steam_library_sync_if_due(
+        user_id=user_id,
+        last_synced_at=None,
+    )
+    return response
 
 
 async def complete_steam_signup(

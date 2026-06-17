@@ -60,7 +60,7 @@ def build_steam_openid_url(return_to: str, realm: str) -> str:
 
 
 async def verify_steam_openid(params: dict[str, str]) -> bool:
-    payload = dict(params)
+    payload = {key: value for key, value in params.items() if key.startswith("openid.")}
     payload["openid.mode"] = "check_authentication"
 
     async with httpx.AsyncClient(timeout=10.0) as client:
