@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +37,7 @@ async def steam_auth_login_api() -> RedirectResponse:
 @router.get("/auth/steam/callback", status_code=status.HTTP_302_FOUND)
 async def steam_auth_callback_api(
     request: Request,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
     response = RedirectResponse(
@@ -48,6 +49,7 @@ async def steam_auth_callback_api(
             db=db,
             response=response,
             params=dict(request.query_params),
+            background_tasks=background_tasks,
         )
     except BadRequestException:
         response.headers["location"] = get_frontend_steam_callback_url(
@@ -84,6 +86,7 @@ async def steam_connect_api(
 @router.get("/steam/connect/callback", status_code=status.HTTP_302_FOUND)
 async def steam_connect_callback_api(
     request: Request,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
     response = RedirectResponse(
@@ -95,6 +98,7 @@ async def steam_connect_callback_api(
             db=db,
             state=request.query_params.get("state"),
             params=dict(request.query_params),
+            background_tasks=background_tasks,
         )
     except (BadRequestException, ConflictException, NotFoundException):
         response.headers["location"] = get_frontend_steam_callback_url(
@@ -123,12 +127,14 @@ async def steam_connect_callback_api(
 )
 async def steam_link_api(
     request: SteamLinkRequest,
+    background_tasks: BackgroundTasks,
     user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> SteamLinkResponse:
     response = await link_steam_account(db, user_id, request.steam_id)
     await db.commit()
     await enqueue_steam_library_sync_if_due(
+        background_tasks=background_tasks,
         user_id=user_id,
         last_synced_at=None,
     )

@@ -12,7 +12,6 @@ celery_app = Celery(
         "app.game.tasks",
         # "app.chat.tasks",
         # "app.recommend.tasks",
-        "app.steam.tasks",
     ],
 )
 

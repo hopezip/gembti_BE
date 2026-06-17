@@ -1,8 +1,8 @@
-import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from app.core.celery_app import celery_app
+from fastapi import BackgroundTasks
+
 from app.core.database import AsyncSessionLocal
 from app.core.enums import RedisPurpose
 from app.core.redis import get_redis
@@ -47,34 +47,24 @@ async def release_steam_library_sync_lock(user_id: int) -> None:
     await redis.delete(steam_library_sync_lock_key(user_id))
 
 
-async def _sync_steam_library_async(user_id: int) -> dict[str, object]:
+async def _sync_steam_library_async(user_id: int) -> None:
     try:
         async with AsyncSessionLocal() as db:
-            result = await sync_steam_library(db, user_id)
+            await sync_steam_library(db, user_id)
             await db.commit()
-            return result.model_dump(mode="json")
     finally:
         await release_steam_library_sync_lock(user_id)
 
 
-@celery_app.task(name="app.steam.tasks.sync_steam_library")
-def sync_steam_library_task(user_id: int) -> dict[str, object]:
-    return asyncio.run(_sync_steam_library_async(user_id))
-
-
-def enqueue_steam_library_sync(user_id: int) -> str:
-    task = sync_steam_library_task.delay(user_id)
-    return str(task.id)
-
-
 async def enqueue_steam_library_sync_if_due(
+    background_tasks: BackgroundTasks,
     user_id: int,
     last_synced_at: datetime | None,
-) -> str | None:
+) -> None:
     if not is_steam_library_sync_due(last_synced_at):
-        return None
+        return
 
     if not await acquire_steam_library_sync_lock(user_id):
-        return None
+        return
 
-    return enqueue_steam_library_sync(user_id)
+    background_tasks.add_task(_sync_steam_library_async, user_id)
