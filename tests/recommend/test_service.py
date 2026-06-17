@@ -29,6 +29,8 @@ async def test_generate_recommendations_excludes_user_steam_library_games(
         image_url=None,
         genres=["Action"],
         review_score=95.0,
+        review_count=1000,
+        current_players=0,
         trait_vector=[80, 60, 40, 70, 90, 30],
     )
     captured_excluded_app_ids: list[int] | None = None
