@@ -44,7 +44,9 @@ from app.auth.schemas import (
     MessageResponse,
     NicknameCheckResponse,
     PasswordResetRequest,
+    ProfileResponse,
     ProfileUpdateRequest,
+    ProfileUpdateResponse,
     SignupRequest,
     SteamLibraryGameResponse,
     SteamLibraryResponse,
@@ -228,7 +230,7 @@ async def update_me(
     db: AsyncSession,
     user_id: int,
     request: ProfileUpdateRequest,
-) -> UserResponse:
+) -> ProfileUpdateResponse:
     user = await get_user_by_id(db, user_id)
     if user is None:
         raise NotFoundException("사용자를 찾을 수 없습니다.")
@@ -247,7 +249,16 @@ async def update_me(
         user.birth_date = request.birth_date  # type: ignore[assignment]
 
     await db.commit()
-    return await get_me(db, user.id)
+    return ProfileUpdateResponse(
+        profile=ProfileResponse(
+            user_id=user.id,
+            email=user.email,
+            nickname=user.nickname,
+            bio=user.bio,
+            gender=user.gender,
+            birth_date=cast("date | None", user.birth_date),
+        )
+    )
 
 
 async def get_my_activity(

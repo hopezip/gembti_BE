@@ -1,6 +1,7 @@
 # 추천 생성 전체 흐름 및 warning_list 분리
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 from app.core.exceptions import BadRequestException, NotFoundException
@@ -49,6 +50,36 @@ def build_recommended_game_response(
     )
 
 
+def normalize_percent_score(score: float | None) -> float:
+    if score is None:
+        return 0.0
+
+    return max(0.0, min(float(score) / 100, 1.0))
+
+
+def normalize_count_score(count: int | None) -> float:
+    if count is None or count <= 0:
+        return 0.0
+
+    return min(math.log10(count + 1) / 6, 1.0)
+
+
+def calculate_recommendation_sort_score(
+    game: Game,
+    similarity_score: float,
+) -> float:
+    review_score = normalize_percent_score(game.review_score)
+    review_count_score = normalize_count_score(game.review_count)
+    current_players_score = normalize_count_score(game.current_players)
+
+    return (
+        similarity_score * 0.70
+        + review_score * 0.15
+        + review_count_score * 0.10
+        + current_players_score * 0.05
+    )
+
+
 async def generate_recommendations(
     db: AsyncSession,
     user_id: int,
@@ -64,11 +95,28 @@ async def generate_recommendations(
         raise BadRequestException("추천 가능한 게임 데이터가 없습니다.")
 
     user_vector = user_stats_to_vector(user_stats)
-    scored_games = [
-        (game, cosine_similarity(user_vector, [float(value) for value in game.trait_vector]))
-        for game in games
+    scored_games = []
+
+    for game in games:
+        similarity_score = cosine_similarity(
+            user_vector,
+            [float(value) for value in game.trait_vector],
+        )
+        sort_score = calculate_recommendation_sort_score(
+            game=game,
+            similarity_score=similarity_score,
+        )
+        scored_games.append((game, similarity_score, sort_score))
+
+    ranked_scored_games = sorted(
+        scored_games,
+        key=lambda item: item[2],
+        reverse=True,
+    )[:limit]
+
+    ranked_games = [
+        (game, similarity_score) for game, similarity_score, sort_score in ranked_scored_games
     ]
-    ranked_games = sorted(scored_games, key=lambda item: item[1], reverse=True)[:limit]
 
     recommendation_items = await save_recommendation_items(
         db=db,
@@ -227,7 +275,11 @@ async def get_popular_recommendations(
     if not recommendation_items:
         raise NotFoundException("추천 기록 없음")
 
-    popular_items = [item for item in recommendation_items if item.game.current_players is not None]
+    popular_items = [
+        item
+        for item in recommendation_items
+        if item.game.current_players is not None and item.game.current_players > 0
+    ]
 
     if not popular_items:
         raise NotFoundException("맞춤 인기 게임 없음")
