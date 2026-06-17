@@ -23,9 +23,9 @@ class RecordingEmbeddingClient(FakeEmbeddingClient):
         super().__init__()
         self.calls: list[str] = []
 
-    def embed_text(self, text: str) -> list[float]:
+    async def embed_text(self, text: str) -> list[float]:
         self.calls.append(text)
-        return super().embed_text(text)
+        return await super().embed_text(text)
 
 
 @pytest.mark.asyncio
@@ -71,6 +71,22 @@ async def test_generate_support_rag_answer_embeds_current_message_only() -> None
 
 
 @pytest.mark.asyncio
+async def test_generate_support_rag_answer_awaits_embedding_client() -> None:
+    embedding_client = RecordingEmbeddingClient()
+    vector_store = FakeChatChunkVectorStore()
+    responder = RecordingSupportResponder()
+
+    await generate_support_rag_answer(
+        message="new async embedding question",
+        embedding_client=embedding_client,
+        vector_store=vector_store,
+        responder=responder,
+    )
+
+    assert embedding_client.calls == ["new async embedding question"]
+
+
+@pytest.mark.asyncio
 async def test_generate_support_rag_answer_uses_retrieved_chunks() -> None:
     embedding_client = FakeEmbeddingClient()
     vector_store = FakeChatChunkVectorStore()
@@ -83,7 +99,7 @@ async def test_generate_support_rag_answer_uses_retrieved_chunks() -> None:
             ChatChunkVectorWrite(
                 content=chunk_content,
                 source="support.account#chunk-0001",
-                embedding_vector=tuple(embedding_client.embed_text(chunk_content)),
+                embedding_vector=tuple(await embedding_client.embed_text(chunk_content)),
             )
         ]
     )

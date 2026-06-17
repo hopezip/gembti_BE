@@ -16,7 +16,7 @@ SUPPORT_CHAT_EMBEDDING_DIMENSIONS_ENV = "SUPPORT_CHAT_EMBEDDING_DIMENSIONS"
 
 
 class EmbeddingClient(Protocol):
-    def embed_text(self, text: str) -> list[float]:
+    async def embed_text(self, text: str) -> list[float]:
         """주어진 텍스트의 임베딩 벡터를 반환한다."""
 
 
@@ -92,9 +92,9 @@ def _create_openai_client(*, api_key: str, timeout: float | None) -> Any:
             "openai package is required for OpenAIEmbeddingClient"
         ) from exc
 
-    openai_client_type = getattr(openai_module, "OpenAI", None)
+    openai_client_type = getattr(openai_module, "AsyncOpenAI", None)
     if openai_client_type is None:
-        raise EmbeddingConfigurationError("openai.OpenAI is not available")
+        raise EmbeddingConfigurationError("openai.AsyncOpenAI is not available")
 
     kwargs: dict[str, Any] = {"api_key": api_key}
     if timeout is not None:
@@ -179,7 +179,7 @@ class OpenAIEmbeddingClient:
             sdk_client=sdk_client,
         )
 
-    def embed_text(self, text: str) -> list[float]:
+    async def embed_text(self, text: str) -> list[float]:
         normalized_text = text.strip()
         if not normalized_text:
             raise ValueError("text must not be blank")
@@ -194,7 +194,7 @@ class OpenAIEmbeddingClient:
 
         authentication_error, api_error = _load_openai_api_exception_types()
         try:
-            response = self._client.embeddings.create(**request)
+            response = await self._client.embeddings.create(**request)
         except authentication_error as exc:
             raise EmbeddingConfigurationError("openai authentication failed") from exc
         except api_error as exc:
@@ -210,7 +210,7 @@ class FakeEmbeddingClient:
             raise ValueError("dimensions must be greater than 0")
         self.dimensions = dimensions
 
-    def embed_text(self, text: str) -> list[float]:
+    async def embed_text(self, text: str) -> list[float]:
         normalized_text = text.strip()
         if not normalized_text:
             return [0.0] * self.dimensions
