@@ -45,6 +45,7 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "https://gembti.cloud",
         "https://www.gembti.cloud",
+        "https://app.gembti.cloud",
     ]
     ALLOWED_ORIGIN_REGEX: str = r"https://.*\.vercel\.app"
     TRUSTED_HOSTS: list[str] = [
