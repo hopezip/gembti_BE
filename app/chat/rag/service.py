@@ -47,7 +47,7 @@ async def generate_support_rag_answer(
     responder: SupportResponder,
 ) -> SupportRagAnswer:
     """질문을 벡터 검색한 뒤, 검색된 청크로 답변 결과를 생성한다."""
-    query_embedding = embedding_client.embed_text(message)
+    query_embedding = await embedding_client.embed_text(message)
     raw_retrieval_results = vector_store.search(
         query_embedding,
         top_k=SUPPORT_RAG_SETTINGS.top_k,
@@ -93,14 +93,15 @@ async def ingest_support_help_documents(
         )
     ]
 
-    entries = [
-        ChatChunkVectorWrite(
-            content=draft.content,
-            source=draft.source,
-            embedding_vector=tuple(embedding_client.embed_text(draft.content)),
+    entries = []
+    for draft in drafts:
+        entries.append(
+            ChatChunkVectorWrite(
+                content=draft.content,
+                source=draft.source,
+                embedding_vector=tuple(await embedding_client.embed_text(draft.content)),
+            )
         )
-        for draft in drafts
-    ]
 
     raw_upsert_result = cast("Any", vector_store.upsert)(entries)
     if inspect.isawaitable(raw_upsert_result):
