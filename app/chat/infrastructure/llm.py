@@ -10,8 +10,6 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterator
 
     class ChatChunkHit(Protocol):
-        """``rag.model`` merge 전까지 mypy용 최소 히트 Protocol."""
-
         @property
         def source(self) -> str: ...
 
@@ -19,7 +17,6 @@ if TYPE_CHECKING:
         def content(self) -> str: ...
 
 
-# ``cs.prompt`` merge 전 임시 상수. 이후 ``from app.chat.cs.prompt import ...`` 로 교체.
 FALLBACK_ANSWER = (
     "근거 문서에서 확인되지 않아 일반 안내만 제공할 수 있어요. "
     "질문을 조금 더 구체적으로 바꾸거나 운영팀에 문의해 주세요."
@@ -31,27 +28,23 @@ DEFAULT_OPENAI_CHAT_MODEL = "gpt-4o-mini"
 
 
 class LlmConfigurationError(RuntimeError):
-    """런타임 LLM 어댑터를 설정할 수 없을 때 발생한다."""
+    pass
 
 
 class LlmResponseError(RuntimeError):
-    """런타임 LLM 응답을 읽을 수 없을 때 발생한다."""
+    pass
 
 
 class SupportResponder(Protocol):
-    """벡터 검색 결과를 받아 답변 토큰을 스트리밍하는 인터페이스."""
-
     def stream_answer(
         self,
         question: str,
         chunks: list[ChatChunkHit] | tuple[ChatChunkHit, ...],
-    ) -> AsyncIterator[str]:
-        """이미 검색된 벡터 히트로부터 답변 토큰 조각을 순서대로 내보낸다."""
+        recent_turns: list[dict[str, str]] | None = None,
+    ) -> AsyncIterator[str]: ...
 
 
 class DeterministicSupportResponder:
-    """실시간 LLM 호출 없이 검색된 히트 내용으로 답변을 구성한다."""
-
     def answer(self, question: str, chunks: list[ChatChunkHit] | tuple[ChatChunkHit, ...]) -> str:
         del question
         contents = [chunk.content.strip() for chunk in chunks[:2] if chunk.content.strip()]
@@ -63,14 +56,14 @@ class DeterministicSupportResponder:
         self,
         question: str,
         chunks: list[ChatChunkHit] | tuple[ChatChunkHit, ...],
+        recent_turns: list[dict[str, str]] | None = None,
     ) -> AsyncIterator[str]:
+        del recent_turns
         for delta in iter_text_deltas(self.answer(question, chunks)):
             yield delta
 
 
 class OpenAIChatResponder:
-    """주입 가능한 OpenAI 채팅 어댑터. 기본값으로는 자동 생성되지 않는다."""
-
     def __init__(
         self,
         *,
@@ -89,7 +82,6 @@ class OpenAIChatResponder:
 
     @classmethod
     def from_env(cls, *, sdk_client: Any | None = None) -> OpenAIChatResponder:
-        """환경 변수에서 모델명·API 키를 읽어 OpenAI 채팅 응답기를 만든다."""
         return cls(
             model=os.getenv(SUPPORT_CHAT_LLM_MODEL_ENV, DEFAULT_OPENAI_CHAT_MODEL),
             api_key=_load_openai_api_key_from_settings(),
@@ -100,13 +92,14 @@ class OpenAIChatResponder:
         self,
         question: str,
         chunks: list[ChatChunkHit] | tuple[ChatChunkHit, ...],
+        recent_turns: list[dict[str, str]] | None = None,
     ) -> AsyncIterator[str]:
         if not chunks:
             for delta in iter_text_deltas(FALLBACK_ANSWER):
                 yield delta
             return
 
-        messages = _build_chat_messages(question, chunks)
+        messages = _build_chat_messages(question, chunks, recent_turns=recent_turns)
         authentication_error, api_error = _load_openai_api_exception_types()
         try:
             stream = await self._client.chat.completions.create(
@@ -156,20 +149,40 @@ def iter_text_deltas(text: str) -> Iterator[str]:
 def _build_chat_messages(
     question: str,
     chunks: list[ChatChunkHit] | tuple[ChatChunkHit, ...],
+    recent_turns: list[dict[str, str]] | None = None,
 ) -> list[dict[str, str]]:
     context = "\n\n".join(
         f"[{chunk.source}] {chunk.content}" for chunk in chunks[:3] if chunk.content.strip()
     )
-    return [
+    messages = [
         {
             "role": "system",
             "content": SUPPORT_ANSWER_POLICY,
-        },
+        }
+    ]
+    for turn in recent_turns or []:
+        user_message = turn.get("user", "").strip()
+        assistant_answer = turn.get("assistant", "").strip()
+        if user_message:
+            messages.append({"role": "user", "content": user_message})
+        if assistant_answer:
+            messages.append({"role": "assistant", "content": assistant_answer})
+
+    messages.append(
         {
             "role": "user",
-            "content": f"질문: {question}\n\n근거:\n{context}",
-        },
-    ]
+            "content": f"근거:\n{context}",
+        }
+    )
+
+    messages.append(
+        {
+            "role": "user",
+            "content": question,
+        }
+    )
+
+    return messages
 
 
 def _validate_model_name(model: str) -> str:

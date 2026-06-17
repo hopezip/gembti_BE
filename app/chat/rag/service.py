@@ -41,6 +41,7 @@ class SupportRagIngestionResult:
 async def generate_support_rag_answer(
     message: str,
     *,
+    recent_turns: list[dict[str, str]] | None = None,
     embedding_client: EmbeddingClient,
     vector_store: ChatChunkVectorStore,
     responder: SupportResponder,
@@ -59,7 +60,11 @@ async def generate_support_rag_answer(
     chunks = tuple(result.chunk for result in retrieval_results)
 
     answer_deltas: list[str] = []
-    async for delta in responder.stream_answer(message, chunks):
+    async for delta in responder.stream_answer(
+        message,
+        chunks,
+        recent_turns=recent_turns,
+    ):
         answer_deltas.append(delta)
 
     answer = "".join(answer_deltas)

@@ -85,36 +85,6 @@ async def get_recent_support_chat_turns(session_id: str) -> list[dict[str, str]]
     return decoded_turns
 
 
-def build_support_chat_question(
-    message: str,
-    recent_turns: list[dict[str, str]],
-) -> str:
-    if not recent_turns:
-        return message
-
-    turn_lines = []
-    for turn in recent_turns[-3:]:
-        user_message = turn.get("user", "").strip()
-        assistant_answer = turn.get("assistant", "").strip()
-        if user_message:
-            turn_lines.append(f"사용자: {user_message}")
-        if assistant_answer:
-            turn_lines.append(f"챗봇: {assistant_answer}")
-
-    if not turn_lines:
-        return message
-
-    return "\n".join(
-        [
-            "최근 대화:",
-            *turn_lines,
-            "",
-            "현재 질문:",
-            message,
-        ]
-    )
-
-
 def validate_support_chat_message_request(request: SupportChatMessageRequest) -> None:
     if not request.message:
         raise BadRequestException("메시지는 필수입니다.")
@@ -126,11 +96,11 @@ async def generate_support_chat_answer(
     message: str,
     recent_turns: list[dict[str, str]],
 ) -> SupportRagAnswer | str:
-    question = build_support_chat_question(message, recent_turns)
     try:
         async with AsyncSessionLocal() as db:
             return await generate_support_rag_answer(
-                message=question,
+                message=message,
+                recent_turns=recent_turns,
                 embedding_client=OpenAIEmbeddingClient.from_env(),
                 vector_store=AsyncPgvectorChatChunkVectorStore(
                     db,
