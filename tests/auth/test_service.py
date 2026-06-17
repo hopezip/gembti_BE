@@ -17,7 +17,12 @@ from app.auth.schemas import (
     WithdrawRequest,
 )
 from app.core.enums import LoginProvider, UserStatus
-from app.core.exceptions import BadRequestException, ForbiddenException, UnauthorizedException
+from app.core.exceptions import (
+    BadRequestException,
+    ConflictException,
+    ForbiddenException,
+    UnauthorizedException,
+)
 from app.core.security import decode_token
 
 
@@ -132,7 +137,7 @@ async def test_login_hides_invalid_credential_reason(
 
 
 @pytest.mark.asyncio
-async def test_check_nickname_available_returns_false_for_duplicate(
+async def test_check_nickname_available_raises_conflict_for_duplicate(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def get_user_by_nickname(db: AsyncSession, nickname: str) -> User | None:
@@ -140,13 +145,20 @@ async def test_check_nickname_available_returns_false_for_duplicate(
 
     monkeypatch.setattr(service, "get_user_by_nickname", get_user_by_nickname)
 
-    result = await service.check_nickname_available(
-        cast("AsyncSession", object()),
-        "tester",
-    )
+    with pytest.raises(ConflictException, match="이미 사용 중인 닉네임입니다."):
+        await service.check_nickname_available(
+            cast("AsyncSession", object()),
+            "tester",
+        )
 
-    assert result.available is False
-    assert result.message == "이미 사용 중인 닉네임입니다."
+
+@pytest.mark.asyncio
+async def test_check_nickname_available_raises_bad_request_for_invalid_format() -> None:
+    with pytest.raises(BadRequestException, match="닉네임 형식이 올바르지 않습니다."):
+        await service.check_nickname_available(
+            cast("AsyncSession", object()),
+            "ㄱㅁㄷ",
+        )
 
 
 @pytest.mark.asyncio

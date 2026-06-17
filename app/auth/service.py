@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+import re
 import secrets
 from typing import TYPE_CHECKING, cast
 
@@ -179,11 +180,11 @@ async def check_nickname_available(
     db: AsyncSession,
     nickname: str,
 ) -> NicknameCheckResponse:
+    if not 2 <= len(nickname) <= 8 or not re.fullmatch(r"[가-힣A-Za-z0-9]+", nickname):
+        raise BadRequestException("닉네임 형식이 올바르지 않습니다.")
+
     if await get_user_by_nickname(db, nickname):
-        return NicknameCheckResponse(
-            available=False,
-            message="이미 사용 중인 닉네임입니다.",
-        )
+        raise ConflictException("이미 사용 중인 닉네임입니다.")
 
     return NicknameCheckResponse(
         available=True,
@@ -214,7 +215,6 @@ async def get_me(
         status=user.status,
         steam_linked=user.steam_linked,
         steam_id_64=user.steam_id_64,
-        steam_id=user.steam_id_64,
         steam_avatar_url=user.steam_avatar_url,
         steam_sync_status=user.steam_sync_status,
         last_synced_at=user.last_synced_at,
