@@ -9,6 +9,67 @@ from app.chat.infrastructure.vector_store import (
 from app.chat.rag.service import generate_support_rag_answer
 
 
+class RecordingSupportResponder:
+    def __init__(self) -> None:
+        self.received_recent_turns = None
+
+    async def stream_answer(self, question, chunks, recent_turns=None):
+        self.received_recent_turns = recent_turns
+        yield "generated answer"
+
+
+class RecordingEmbeddingClient(FakeEmbeddingClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls: list[str] = []
+
+    def embed_text(self, text: str) -> list[float]:
+        self.calls.append(text)
+        return super().embed_text(text)
+
+
+@pytest.mark.asyncio
+async def test_generate_support_rag_answer_passes_recent_turns_to_responder() -> None:
+    embedding_client = FakeEmbeddingClient()
+    vector_store = FakeChatChunkVectorStore()
+    responder = RecordingSupportResponder()
+    recent_turns = [{"user": "old question", "assistant": "old answer"}]
+
+    result = await generate_support_rag_answer(
+        message="new question",
+        recent_turns=recent_turns,
+        embedding_client=embedding_client,
+        vector_store=vector_store,
+        responder=responder,
+    )
+
+    assert result.answer == "generated answer"
+    assert responder.received_recent_turns == recent_turns
+
+
+@pytest.mark.asyncio
+async def test_generate_support_rag_answer_embeds_current_message_only() -> None:
+    embedding_client = RecordingEmbeddingClient()
+    vector_store = FakeChatChunkVectorStore()
+    responder = RecordingSupportResponder()
+    recent_turns = [
+        {
+            "user": "old password reset question",
+            "assistant": "old password reset answer",
+        }
+    ]
+
+    await generate_support_rag_answer(
+        message="new steam sync question",
+        recent_turns=recent_turns,
+        embedding_client=embedding_client,
+        vector_store=vector_store,
+        responder=responder,
+    )
+
+    assert embedding_client.calls == ["new steam sync question"]
+
+
 @pytest.mark.asyncio
 async def test_generate_support_rag_answer_uses_retrieved_chunks() -> None:
     embedding_client = FakeEmbeddingClient()

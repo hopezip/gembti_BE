@@ -214,6 +214,69 @@ async def test_get_recent_support_chat_turns_returns_saved_turns(
 
 
 @pytest.mark.asyncio
+async def test_generate_support_chat_answer_passes_current_message_and_recent_turns_separately(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recent_turns = [{"user": "old question", "assistant": "old answer"}]
+    captured: dict[str, object] = {}
+
+    class FakeSessionContext:
+        async def __aenter__(self) -> object:
+            return object()
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+    async def fake_generate_support_rag_answer(
+        *,
+        message: str,
+        recent_turns: list[dict[str, str]],
+        embedding_client: object,
+        vector_store: object,
+        responder: object,
+    ) -> support_chat_service.SupportRagAnswer:
+        del embedding_client, vector_store, responder
+        captured["message"] = message
+        captured["recent_turns"] = recent_turns
+        return support_chat_service.SupportRagAnswer(
+            answer="generated answer",
+            citations=[],
+            fallback_used=False,
+        )
+
+    monkeypatch.setattr(support_chat_service, "AsyncSessionLocal", FakeSessionContext)
+    monkeypatch.setattr(
+        support_chat_service.OpenAIEmbeddingClient,
+        "from_env",
+        lambda: object(),
+    )
+    monkeypatch.setattr(
+        support_chat_service,
+        "AsyncPgvectorChatChunkVectorStore",
+        lambda db, score_threshold: object(),
+    )
+    monkeypatch.setattr(
+        support_chat_service.OpenAIChatResponder,
+        "from_env",
+        lambda: object(),
+    )
+    monkeypatch.setattr(
+        support_chat_service,
+        "generate_support_rag_answer",
+        fake_generate_support_rag_answer,
+    )
+
+    result = await support_chat_service.generate_support_chat_answer(
+        message="new question",
+        recent_turns=recent_turns,
+    )
+
+    assert result.answer == "generated answer"
+    assert captured["message"] == "new question"
+    assert captured["recent_turns"] == recent_turns
+
+
+@pytest.mark.asyncio
 async def test_create_support_chat_message_passes_recent_turns_to_answer_generator(
     fake_redis: FakeRedis,
     monkeypatch: pytest.MonkeyPatch,
