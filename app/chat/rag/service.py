@@ -17,6 +17,8 @@ from app.chat.rag.model import SUPPORT_RAG_SETTINGS
 from app.chat.schemas import SupportChatCitation
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
     from app.chat.infrastructure.embedding import EmbeddingClient
     from app.chat.infrastructure.llm import SupportResponder
     from app.chat.infrastructure.vector_store import ChatChunkVectorStore
@@ -31,6 +33,16 @@ class SupportRagAnswer:
 
 
 @dataclass(frozen=True)
+class SupportRagAnswerDelta:
+    content: str
+
+
+@dataclass(frozen=True)
+class SupportRagAnswerFinal:
+    answer: SupportRagAnswer
+
+
+@dataclass(frozen=True)
 class SupportRagIngestionResult:
     """고객센터 RAG 문서 적재 결과"""
 
@@ -38,24 +50,19 @@ class SupportRagIngestionResult:
     chunk_count: int
 
 
-async def generate_support_rag_answer(
+async def stream_support_rag_answer(
     message: str,
     *,
     recent_turns: list[dict[str, str]] | None = None,
     embedding_client: EmbeddingClient,
     vector_store: ChatChunkVectorStore,
     responder: SupportResponder,
-) -> SupportRagAnswer:
-    """질문을 벡터 검색한 뒤, 검색된 청크로 답변 결과를 생성한다."""
-    query_embedding = await embedding_client.embed_text(message)
-    raw_retrieval_results = vector_store.search(
-        query_embedding,
-        top_k=SUPPORT_RAG_SETTINGS.top_k,
-    )
-    retrieval_results = (
-        await raw_retrieval_results
-        if inspect.isawaitable(raw_retrieval_results)
-        else raw_retrieval_results
+) -> AsyncIterator[SupportRagAnswerDelta | SupportRagAnswerFinal]:
+    """질문을 벡터 검색한 뒤, 답변 조각과 최종 결과를 순서대로 흘려보낸다."""
+    retrieval_results = await _retrieve_support_rag_chunks(
+        message,
+        embedding_client=embedding_client,
+        vector_store=vector_store,
     )
     chunks = tuple(result.chunk for result in retrieval_results)
 
@@ -66,12 +73,32 @@ async def generate_support_rag_answer(
         recent_turns=recent_turns,
     ):
         answer_deltas.append(delta)
+        yield SupportRagAnswerDelta(content=delta)
 
-    answer = "".join(answer_deltas)
-    return SupportRagAnswer(
-        answer=answer,
-        citations=_build_citations(retrieval_results),
-        fallback_used=not chunks,
+    yield SupportRagAnswerFinal(
+        answer=SupportRagAnswer(
+            answer="".join(answer_deltas),
+            citations=_build_citations(retrieval_results),
+            fallback_used=not chunks,
+        )
+    )
+
+
+async def _retrieve_support_rag_chunks(
+    message: str,
+    *,
+    embedding_client: EmbeddingClient,
+    vector_store: ChatChunkVectorStore,
+) -> list[RetrievalResult]:
+    query_embedding = await embedding_client.embed_text(message)
+    raw_retrieval_results = vector_store.search(
+        query_embedding,
+        top_k=SUPPORT_RAG_SETTINGS.top_k,
+    )
+    return (
+        await raw_retrieval_results
+        if inspect.isawaitable(raw_retrieval_results)
+        else raw_retrieval_results
     )
 
 

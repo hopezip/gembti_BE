@@ -50,6 +50,18 @@ class FakeRedis:
         return values[start : stop + 1]
 
 
+async def collect_support_chat_events(
+    request: SupportChatMessageRequest,
+) -> list[dict[str, object]]:
+    return [event async for event in support_chat_service.stream_support_chat_message(request)]
+
+
+def final_support_chat_event(events: list[dict[str, object]]) -> dict[str, object]:
+    final_events = [event for event in events if event["type"] == "final"]
+    assert len(final_events) == 1
+    return final_events[0]
+
+
 @pytest.fixture
 def fake_redis(monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeRedis]:
     redis = FakeRedis()
@@ -87,34 +99,34 @@ async def test_create_support_chat_session_stores_session_with_ttl(
 
 
 @pytest.mark.asyncio
-async def test_create_support_chat_message_creates_redis_session_when_session_id_missing(
+async def test_stream_support_chat_message_creates_redis_session_when_session_id_missing(
     fake_redis: FakeRedis,
 ) -> None:
     request = SupportChatMessageRequest(message="test message")
 
-    response = await support_chat_service.create_support_chat_message(request)
+    final_event = final_support_chat_event(await collect_support_chat_events(request))
 
-    key = support_chat_service.support_chat_session_key(response.session_id)
+    key = support_chat_service.support_chat_session_key(str(final_event["session_id"]))
     assert key in fake_redis.hashes
     assert fake_redis.hashes[key] == {"turn_count": "0"}
-    assert response.session_expired is False
+    assert final_event["session_expired"] is False
 
 
 @pytest.mark.asyncio
-async def test_create_support_chat_message_saves_turn_after_response(
+async def test_stream_support_chat_message_saves_turn_after_final_event(
     fake_redis: FakeRedis,
 ) -> None:
     request = SupportChatMessageRequest(message="hello")
 
-    response = await support_chat_service.create_support_chat_message(request)
+    final_event = final_support_chat_event(await collect_support_chat_events(request))
 
-    turns_key = support_chat_service.support_chat_session_turns_key(response.session_id)
+    turns_key = support_chat_service.support_chat_session_turns_key(str(final_event["session_id"]))
     saved_turn = json.loads(fake_redis.lists[turns_key][0])
-    assert saved_turn == {"user": "hello", "assistant": response.answer}
+    assert saved_turn == {"user": "hello", "assistant": final_event["answer"]}
 
 
 @pytest.mark.asyncio
-async def test_create_support_chat_message_reuses_existing_redis_session_and_refreshes_ttl(
+async def test_stream_support_chat_message_reuses_existing_redis_session_and_refreshes_ttl(
     fake_redis: FakeRedis,
 ) -> None:
     existing_session_id = "existing-session-id"
@@ -126,15 +138,15 @@ async def test_create_support_chat_message_reuses_existing_redis_session_and_ref
         session_id=existing_session_id,
     )
 
-    response = await support_chat_service.create_support_chat_message(request)
+    final_event = final_support_chat_event(await collect_support_chat_events(request))
 
-    assert response.session_id == existing_session_id
-    assert response.session_expired is False
+    assert final_event["session_id"] == existing_session_id
+    assert final_event["session_expired"] is False
     assert fake_redis.expires[key] == settings.SUPPORT_CHAT_SESSION_TTL_SECONDS
 
 
 @pytest.mark.asyncio
-async def test_create_support_chat_message_recreates_session_when_existing_session_expired(
+async def test_stream_support_chat_message_recreates_session_when_existing_session_expired(
     fake_redis: FakeRedis,
 ) -> None:
     expired_session_id = "expired-session-id"
@@ -143,12 +155,13 @@ async def test_create_support_chat_message_recreates_session_when_existing_sessi
         session_id=expired_session_id,
     )
 
-    response = await support_chat_service.create_support_chat_message(request)
+    final_event = final_support_chat_event(await collect_support_chat_events(request))
 
-    new_key = support_chat_service.support_chat_session_key(response.session_id)
-    assert response.session_id != expired_session_id
-    UUID(response.session_id)
-    assert response.session_expired is True
+    new_session_id = str(final_event["session_id"])
+    new_key = support_chat_service.support_chat_session_key(new_session_id)
+    assert new_session_id != expired_session_id
+    UUID(new_session_id)
+    assert final_event["session_expired"] is True
     assert new_key in fake_redis.hashes
     assert fake_redis.expires[new_key] == settings.SUPPORT_CHAT_SESSION_TTL_SECONDS
 
@@ -214,7 +227,7 @@ async def test_get_recent_support_chat_turns_returns_saved_turns(
 
 
 @pytest.mark.asyncio
-async def test_generate_support_chat_answer_passes_current_message_and_recent_turns_separately(
+async def test_stream_support_chat_answer_passes_current_message_and_recent_turns_separately(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     recent_turns = [{"user": "old question", "assistant": "old answer"}]
@@ -227,21 +240,23 @@ async def test_generate_support_chat_answer_passes_current_message_and_recent_tu
         async def __aexit__(self, *args: object) -> None:
             return None
 
-    async def fake_generate_support_rag_answer(
+    async def fake_stream_support_rag_answer(
         *,
         message: str,
         recent_turns: list[dict[str, str]],
         embedding_client: object,
         vector_store: object,
         responder: object,
-    ) -> support_chat_service.SupportRagAnswer:
+    ):
         del embedding_client, vector_store, responder
         captured["message"] = message
         captured["recent_turns"] = recent_turns
-        return support_chat_service.SupportRagAnswer(
-            answer="generated answer",
-            citations=[],
-            fallback_used=False,
+        yield support_chat_service.SupportRagAnswerFinal(
+            answer=support_chat_service.SupportRagAnswer(
+                answer="generated answer",
+                citations=[],
+                fallback_used=False,
+            )
         )
 
     monkeypatch.setattr(support_chat_service, "AsyncSessionLocal", FakeSessionContext)
@@ -262,22 +277,27 @@ async def test_generate_support_chat_answer_passes_current_message_and_recent_tu
     )
     monkeypatch.setattr(
         support_chat_service,
-        "generate_support_rag_answer",
-        fake_generate_support_rag_answer,
+        "stream_support_rag_answer",
+        fake_stream_support_rag_answer,
     )
 
-    result = await support_chat_service.generate_support_chat_answer(
-        message="new question",
-        recent_turns=recent_turns,
-    )
+    events = [
+        event
+        async for event in support_chat_service.stream_support_chat_answer(
+            message="new question",
+            recent_turns=recent_turns,
+        )
+    ]
+    final_event = events[-1]
 
-    assert result.answer == "generated answer"
+    assert isinstance(final_event, support_chat_service.SupportRagAnswerFinal)
+    assert final_event.answer.answer == "generated answer"
     assert captured["message"] == "new question"
     assert captured["recent_turns"] == recent_turns
 
 
 @pytest.mark.asyncio
-async def test_create_support_chat_message_passes_recent_turns_to_answer_generator(
+async def test_stream_support_chat_message_passes_recent_turns_to_answer_generator(
     fake_redis: FakeRedis,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -298,15 +318,21 @@ async def test_create_support_chat_message_passes_recent_turns_to_answer_generat
 
     captured: dict[str, object] = {}
 
-    async def fake_generate_answer(message: str, recent_turns: list[dict[str, str]]) -> str:
+    async def fake_stream_answer(message: str, recent_turns: list[dict[str, str]]):
         captured["message"] = message
         captured["recent_turns"] = recent_turns
-        return "generated answer"
+        yield support_chat_service.SupportRagAnswerFinal(
+            answer=support_chat_service.SupportRagAnswer(
+                answer="generated answer",
+                citations=[],
+                fallback_used=False,
+            )
+        )
 
     monkeypatch.setattr(
         support_chat_service,
-        "generate_support_chat_answer",
-        fake_generate_answer,
+        "stream_support_chat_answer",
+        fake_stream_answer,
     )
 
     request = SupportChatMessageRequest(
@@ -314,9 +340,9 @@ async def test_create_support_chat_message_passes_recent_turns_to_answer_generat
         session_id=existing_session_id,
     )
 
-    response = await support_chat_service.create_support_chat_message(request)
+    final_event = final_support_chat_event(await collect_support_chat_events(request))
 
-    assert response.answer == "generated answer"
+    assert final_event["answer"] == "generated answer"
     assert captured["message"] == "new question"
     assert captured["recent_turns"] == [
         {"user": "hello-1", "assistant": "hi-1"},
@@ -325,25 +351,31 @@ async def test_create_support_chat_message_passes_recent_turns_to_answer_generat
 
 
 @pytest.mark.asyncio
-async def test_create_support_chat_message_uses_empty_recent_turns_when_session_expired(
+async def test_stream_support_chat_message_uses_empty_recent_turns_when_session_expired(
     fake_redis: FakeRedis,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     expired_session_id = "expired-session-id"
     captured: dict[str, object] = {}
 
-    async def fake_generate_answer(
+    async def fake_stream_answer(
         message: str,
         recent_turns: list[dict[str, str]],
-    ) -> str:
+    ):
         captured["message"] = message
         captured["recent_turns"] = recent_turns
-        return "generated answer"
+        yield support_chat_service.SupportRagAnswerFinal(
+            answer=support_chat_service.SupportRagAnswer(
+                answer="generated answer",
+                citations=[],
+                fallback_used=False,
+            )
+        )
 
     monkeypatch.setattr(
         support_chat_service,
-        "generate_support_chat_answer",
-        fake_generate_answer,
+        "stream_support_chat_answer",
+        fake_stream_answer,
     )
 
     request = SupportChatMessageRequest(
@@ -351,10 +383,10 @@ async def test_create_support_chat_message_uses_empty_recent_turns_when_session_
         session_id=expired_session_id,
     )
 
-    response = await support_chat_service.create_support_chat_message(request)
+    final_event = final_support_chat_event(await collect_support_chat_events(request))
 
-    assert response.answer == "generated answer"
-    assert response.session_expired is True
-    assert response.session_id != expired_session_id
+    assert final_event["answer"] == "generated answer"
+    assert final_event["session_expired"] is True
+    assert final_event["session_id"] != expired_session_id
     assert captured["message"] == "new question"
     assert captured["recent_turns"] == []

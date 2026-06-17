@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator
 import json
 from typing import Any, cast
 from uuid import uuid4
@@ -14,10 +15,16 @@ from app.chat.infrastructure.llm import (
     LlmConfigurationError,
     LlmResponseError,
     OpenAIChatResponder,
+    iter_text_deltas,
 )
 from app.chat.infrastructure.vector_store import AsyncPgvectorChatChunkVectorStore
 from app.chat.rag.model import SUPPORT_RAG_SETTINGS
-from app.chat.rag.service import SupportRagAnswer, generate_support_rag_answer
+from app.chat.rag.service import (
+    SupportRagAnswer,
+    SupportRagAnswerDelta,
+    SupportRagAnswerFinal,
+    stream_support_rag_answer,
+)
 from app.chat.schemas import SupportChatFinalPayload, SupportChatMessageRequest
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
@@ -92,13 +99,13 @@ def validate_support_chat_message_request(request: SupportChatMessageRequest) ->
         raise BadRequestException("session_id 형식이 올바르지 않습니다.")
 
 
-async def generate_support_chat_answer(
+async def stream_support_chat_answer(
     message: str,
     recent_turns: list[dict[str, str]],
-) -> SupportRagAnswer | str:
+) -> AsyncIterator[SupportRagAnswerDelta | SupportRagAnswerFinal]:
     try:
         async with AsyncSessionLocal() as db:
-            return await generate_support_rag_answer(
+            async for event in stream_support_rag_answer(
                 message=message,
                 recent_turns=recent_turns,
                 embedding_client=OpenAIEmbeddingClient.from_env(),
@@ -107,7 +114,8 @@ async def generate_support_chat_answer(
                     score_threshold=SUPPORT_RAG_SETTINGS.score_threshold,
                 ),
                 responder=OpenAIChatResponder.from_env(),
-            )
+            ):
+                yield event
     except (
         EmbeddingConfigurationError,
         EmbeddingResponseError,
@@ -116,50 +124,59 @@ async def generate_support_chat_answer(
         SQLAlchemyError,
         ValueError,
     ):
-        return SupportRagAnswer(
-            answer=FALLBACK_ANSWER,
-            citations=[],
-            fallback_used=True,
+        answer_deltas: list[str] = []
+        for delta in iter_text_deltas(FALLBACK_ANSWER):
+            answer_deltas.append(delta)
+            yield SupportRagAnswerDelta(content=delta)
+
+        yield SupportRagAnswerFinal(
+            answer=SupportRagAnswer(
+                answer="".join(answer_deltas),
+                citations=[],
+                fallback_used=True,
+            )
         )
 
 
-async def create_support_chat_message(
+async def _resolve_support_chat_session(
     request: SupportChatMessageRequest,
-) -> SupportChatFinalPayload:
-    validate_support_chat_message_request(request)
-    session_expired = False
+) -> tuple[str, bool]:
     if request.session_id is None:
-        session_id = await create_support_chat_session()
-    elif await refresh_support_chat_session_ttl(request.session_id):
-        session_id = request.session_id
-    else:
-        session_id = await create_support_chat_session()
-        session_expired = True
+        return await create_support_chat_session(), False
+    if await refresh_support_chat_session_ttl(request.session_id):
+        return request.session_id, False
+    return await create_support_chat_session(), True
+
+
+async def stream_support_chat_message(
+    request: SupportChatMessageRequest,
+) -> AsyncIterator[dict[str, object]]:
+    validate_support_chat_message_request(request)
+    session_id, session_expired = await _resolve_support_chat_session(request)
 
     recent_turns = await get_recent_support_chat_turns(session_id)
-    answer_result = await generate_support_chat_answer(
+    async for event in stream_support_chat_answer(
         message=request.message,
         recent_turns=recent_turns,
-    )
-    if isinstance(answer_result, str):
-        answer = answer_result
-        citations = []
-        fallback_used = True
-    else:
-        answer = answer_result.answer
-        citations = answer_result.citations
-        fallback_used = answer_result.fallback_used
+    ):
+        if isinstance(event, SupportRagAnswerDelta):
+            if event.content:
+                yield {"type": "delta", "content": event.content}
+            continue
 
-    await save_support_chat_turn(
-        session_id=session_id,
-        user_message=request.message,
-        assistant_answer=answer,
-    )
-
-    return SupportChatFinalPayload(
-        session_id=session_id,
-        answer=answer,
-        citations=citations,
-        fallback_used=fallback_used,
-        session_expired=session_expired,
-    )
+        answer_result = event.answer
+        await save_support_chat_turn(
+            session_id=session_id,
+            user_message=request.message,
+            assistant_answer=answer_result.answer,
+        )
+        final_payload = SupportChatFinalPayload(
+            session_id=session_id,
+            answer=answer_result.answer,
+            citations=answer_result.citations,
+            fallback_used=answer_result.fallback_used,
+            session_expired=session_expired,
+        )
+        final_event = final_payload.model_dump(exclude_none=True)
+        final_event["type"] = "final"
+        yield final_event
