@@ -210,6 +210,37 @@ async def complete_steam_connect(
     return response
 
 
+async def link_steam_for_logged_in_user(
+    db: AsyncSession,
+    user_id: int,
+    params: dict[str, str],
+    background_tasks: BackgroundTasks,
+) -> SteamLinkResponse:
+    steam_id_64 = await verify_and_extract_steam_id(params)
+
+    existing = await get_steam_account_by_steam_id(db, steam_id_64)
+    if existing is not None:
+        if existing.user_id == user_id:
+            return SteamLinkResponse(
+                steam_linked=True,
+                steam_id_64=str(existing.steam_id_64),
+                steam_sync_status=existing.steam_sync_status,
+            )
+        raise ConflictException("이미 다른 사용자에게 연동된 Steam 계정입니다.")
+
+    response = await link_steam_account(db, user_id, str(steam_id_64))
+    await db.commit()
+
+    from app.steam.tasks import enqueue_steam_library_sync_if_due
+
+    await enqueue_steam_library_sync_if_due(
+        background_tasks=background_tasks,
+        user_id=user_id,
+        last_synced_at=None,
+    )
+    return response
+
+
 async def complete_steam_signup(
     db: AsyncSession,
     response: Response,
