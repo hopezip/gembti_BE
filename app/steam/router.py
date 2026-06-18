@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,7 +34,6 @@ async def steam_auth_login_api() -> RedirectResponse:
 @router.get("/auth/steam/callback", status_code=status.HTTP_302_FOUND)
 async def steam_auth_callback_api(
     request: Request,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
     response = RedirectResponse(
@@ -52,7 +51,6 @@ async def steam_auth_callback_api(
                 db=db,
                 user_id=current_user_id,
                 params=params,
-                background_tasks=background_tasks,
             )
             response.headers["location"] = get_frontend_steam_callback_url(
                 result="success",
@@ -66,7 +64,6 @@ async def steam_auth_callback_api(
             db=db,
             response=response,
             params=params,
-            background_tasks=background_tasks,
         )
     except (BadRequestException, ConflictException, NotFoundException):
         response.headers["location"] = get_frontend_steam_callback_url(
@@ -104,7 +101,6 @@ async def steam_connect_api(
 @router.get("/steam/connect/callback", status_code=status.HTTP_302_FOUND)
 async def steam_connect_callback_api(
     request: Request,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
     response = RedirectResponse(
@@ -116,7 +112,6 @@ async def steam_connect_callback_api(
             db=db,
             state=request.query_params.get("state"),
             params=dict(request.query_params),
-            background_tasks=background_tasks,
         )
     except (BadRequestException, ConflictException, NotFoundException):
         response.headers["location"] = get_frontend_steam_callback_url(

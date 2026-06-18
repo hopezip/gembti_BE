@@ -38,7 +38,7 @@ from app.steam.signup_store import (
 )
 
 if TYPE_CHECKING:
-    from fastapi import BackgroundTasks, Response
+    from fastapi import Response
     from sqlalchemy.ext.asyncio import AsyncSession
 
 STEAM_CLAIMED_ID_PATTERN = re.compile(r"^https://steamcommunity\.com/openid/id/(\d{17})$")
@@ -154,7 +154,6 @@ async def complete_steam_login(
     db: AsyncSession,
     response: Response,
     params: dict[str, str],
-    background_tasks: BackgroundTasks,
 ) -> tuple[User, bool, int]:
     steam_id_64 = await verify_and_extract_steam_id(params)
     profile = await get_player_summary(steam_id_64)
@@ -168,10 +167,9 @@ async def complete_steam_login(
     await db.commit()
     await issue_auth_tokens(response, user)
 
-    from app.steam.tasks import enqueue_steam_library_sync_if_due
+    from app.steam.tasks import sync_steam_library_if_due
 
-    await enqueue_steam_library_sync_if_due(
-        background_tasks=background_tasks,
+    await sync_steam_library_if_due(
         user_id=user.id,
         last_synced_at=steam_account.last_synced_at,
     )
@@ -187,7 +185,6 @@ async def complete_steam_connect(
     db: AsyncSession,
     state: str | None,
     params: dict[str, str],
-    background_tasks: BackgroundTasks,
 ) -> SteamLinkResponse:
     if state is None:
         raise BadRequestException("Steam 연동 세션 정보가 없습니다.")
@@ -200,10 +197,9 @@ async def complete_steam_connect(
     response = await link_steam_account(db, user_id, str(steam_id_64))
     await db.commit()
 
-    from app.steam.tasks import enqueue_steam_library_sync_if_due
+    from app.steam.tasks import sync_steam_library_if_due
 
-    await enqueue_steam_library_sync_if_due(
-        background_tasks=background_tasks,
+    await sync_steam_library_if_due(
         user_id=user_id,
         last_synced_at=None,
     )
@@ -214,7 +210,6 @@ async def link_steam_for_logged_in_user(
     db: AsyncSession,
     user_id: int,
     params: dict[str, str],
-    background_tasks: BackgroundTasks,
 ) -> SteamLinkResponse:
     steam_id_64 = await verify_and_extract_steam_id(params)
 
@@ -231,10 +226,9 @@ async def link_steam_for_logged_in_user(
     response = await link_steam_account(db, user_id, str(steam_id_64))
     await db.commit()
 
-    from app.steam.tasks import enqueue_steam_library_sync_if_due
+    from app.steam.tasks import sync_steam_library_if_due
 
-    await enqueue_steam_library_sync_if_due(
-        background_tasks=background_tasks,
+    await sync_steam_library_if_due(
         user_id=user_id,
         last_synced_at=None,
     )
