@@ -69,11 +69,11 @@ async def test_steam_link_queues_library_sync_after_commit(
         )
 
     async def enqueue_steam_library_sync_if_due(
+        background_tasks: object,
         user_id: int,
         last_synced_at: object,
-    ) -> str:
+    ) -> None:
         queued_user_ids.append(user_id)
-        return "task-id"
 
     monkeypatch.setattr(router, "link_steam_account", link_steam_account)
     monkeypatch.setattr(
@@ -82,9 +82,12 @@ async def test_steam_link_queues_library_sync_after_commit(
         enqueue_steam_library_sync_if_due,
     )
 
+    from fastapi import BackgroundTasks
+
     db = FakeSession()
     response = await router.steam_link_api(
         request=SteamLinkRequest(steam_id="76561198000000000"),
+        background_tasks=BackgroundTasks(),
         user_id=7,
         db=cast("AsyncSession", db),
     )

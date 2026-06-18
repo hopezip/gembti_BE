@@ -1,7 +1,8 @@
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
+from typing import cast
 
 import pytest
+from fastapi import BackgroundTasks
 
 from app.steam import tasks
 
@@ -23,23 +24,6 @@ class FakeRedis:
     async def delete(self, key: str) -> int:
         self.deleted_keys.append(key)
         return 1
-
-
-def test_enqueue_steam_library_sync_calls_celery_delay(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    called_user_ids: list[int] = []
-
-    def delay(user_id: int) -> SimpleNamespace:
-        called_user_ids.append(user_id)
-        return SimpleNamespace(id="task-id")
-
-    monkeypatch.setattr(tasks.sync_steam_library_task, "delay", delay)
-
-    task_id = tasks.enqueue_steam_library_sync(7)
-
-    assert task_id == "task-id"
-    assert called_user_ids == [7]
 
 
 def test_is_steam_library_sync_due_without_last_synced_at() -> None:
@@ -71,71 +55,53 @@ def test_is_steam_library_sync_not_due_within_cooldown() -> None:
 
 
 @pytest.mark.asyncio
-async def test_enqueue_steam_library_sync_if_due_skips_recent_sync(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    called_user_ids: list[int] = []
+async def test_enqueue_steam_library_sync_if_due_skips_recent_sync() -> None:
+    background_tasks = BackgroundTasks()
 
-    def enqueue(user_id: int) -> str:
-        called_user_ids.append(user_id)
-        return "task-id"
-
-    monkeypatch.setattr(tasks, "enqueue_steam_library_sync", enqueue)
-
-    task_id = await tasks.enqueue_steam_library_sync_if_due(
+    await tasks.enqueue_steam_library_sync_if_due(
+        background_tasks=background_tasks,
         user_id=7,
         last_synced_at=datetime.now(UTC),
     )
 
-    assert task_id is None
-    assert called_user_ids == []
+    assert background_tasks.tasks == []
 
 
 @pytest.mark.asyncio
 async def test_enqueue_steam_library_sync_if_due_skips_running_sync(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    called_user_ids: list[int] = []
-
     async def get_fake_redis(_purpose: object) -> FakeRedis:
         return FakeRedis(lock_acquired=False)
 
-    def enqueue(user_id: int) -> str:
-        called_user_ids.append(user_id)
-        return "task-id"
-
     monkeypatch.setattr(tasks, "get_redis", get_fake_redis)
-    monkeypatch.setattr(tasks, "enqueue_steam_library_sync", enqueue)
 
-    task_id = await tasks.enqueue_steam_library_sync_if_due(
+    background_tasks = BackgroundTasks()
+
+    await tasks.enqueue_steam_library_sync_if_due(
+        background_tasks=background_tasks,
         user_id=7,
         last_synced_at=None,
     )
 
-    assert task_id is None
-    assert called_user_ids == []
+    assert background_tasks.tasks == []
 
 
 @pytest.mark.asyncio
 async def test_enqueue_steam_library_sync_if_due_enqueues_when_due(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    called_user_ids: list[int] = []
-
     async def get_fake_redis(_purpose: object) -> FakeRedis:
         return FakeRedis(lock_acquired=True)
 
-    def enqueue(user_id: int) -> str:
-        called_user_ids.append(user_id)
-        return "task-id"
-
     monkeypatch.setattr(tasks, "get_redis", get_fake_redis)
-    monkeypatch.setattr(tasks, "enqueue_steam_library_sync", enqueue)
 
-    task_id = await tasks.enqueue_steam_library_sync_if_due(
+    background_tasks = BackgroundTasks()
+
+    await tasks.enqueue_steam_library_sync_if_due(
+        background_tasks=background_tasks,
         user_id=7,
         last_synced_at=None,
     )
 
-    assert task_id == "task-id"
-    assert called_user_ids == [7]
+    assert len(background_tasks.tasks) == 1
