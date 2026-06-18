@@ -6,7 +6,14 @@ from app.chat.infrastructure.vector_store import (
     ChatChunkVectorWrite,
     FakeChatChunkVectorStore,
 )
-from app.chat.rag.service import generate_support_rag_answer
+from app.chat.rag.service import SupportRagAnswer, SupportRagAnswerFinal, stream_support_rag_answer
+
+
+async def collect_final_answer(**kwargs: object) -> SupportRagAnswer:
+    async for event in stream_support_rag_answer(**kwargs):
+        if isinstance(event, SupportRagAnswerFinal):
+            return event.answer
+    raise AssertionError("stream finished without final answer")
 
 
 class RecordingSupportResponder:
@@ -29,13 +36,13 @@ class RecordingEmbeddingClient(FakeEmbeddingClient):
 
 
 @pytest.mark.asyncio
-async def test_generate_support_rag_answer_passes_recent_turns_to_responder() -> None:
+async def test_stream_support_rag_answer_passes_recent_turns_to_responder() -> None:
     embedding_client = FakeEmbeddingClient()
     vector_store = FakeChatChunkVectorStore()
     responder = RecordingSupportResponder()
     recent_turns = [{"user": "old question", "assistant": "old answer"}]
 
-    result = await generate_support_rag_answer(
+    result = await collect_final_answer(
         message="new question",
         recent_turns=recent_turns,
         embedding_client=embedding_client,
@@ -48,7 +55,7 @@ async def test_generate_support_rag_answer_passes_recent_turns_to_responder() ->
 
 
 @pytest.mark.asyncio
-async def test_generate_support_rag_answer_embeds_current_message_only() -> None:
+async def test_stream_support_rag_answer_embeds_current_message_only() -> None:
     embedding_client = RecordingEmbeddingClient()
     vector_store = FakeChatChunkVectorStore()
     responder = RecordingSupportResponder()
@@ -59,7 +66,7 @@ async def test_generate_support_rag_answer_embeds_current_message_only() -> None
         }
     ]
 
-    await generate_support_rag_answer(
+    await collect_final_answer(
         message="new steam sync question",
         recent_turns=recent_turns,
         embedding_client=embedding_client,
@@ -71,12 +78,12 @@ async def test_generate_support_rag_answer_embeds_current_message_only() -> None
 
 
 @pytest.mark.asyncio
-async def test_generate_support_rag_answer_awaits_embedding_client() -> None:
+async def test_stream_support_rag_answer_awaits_embedding_client() -> None:
     embedding_client = RecordingEmbeddingClient()
     vector_store = FakeChatChunkVectorStore()
     responder = RecordingSupportResponder()
 
-    await generate_support_rag_answer(
+    await collect_final_answer(
         message="new async embedding question",
         embedding_client=embedding_client,
         vector_store=vector_store,
@@ -87,7 +94,7 @@ async def test_generate_support_rag_answer_awaits_embedding_client() -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_support_rag_answer_uses_retrieved_chunks() -> None:
+async def test_stream_support_rag_answer_uses_retrieved_chunks() -> None:
     embedding_client = FakeEmbeddingClient()
     vector_store = FakeChatChunkVectorStore()
     responder = DeterministicSupportResponder()
@@ -104,7 +111,7 @@ async def test_generate_support_rag_answer_uses_retrieved_chunks() -> None:
         ]
     )
 
-    result = await generate_support_rag_answer(
+    result = await collect_final_answer(
         message="How do I reset my password?",
         embedding_client=embedding_client,
         vector_store=vector_store,
@@ -117,12 +124,12 @@ async def test_generate_support_rag_answer_uses_retrieved_chunks() -> None:
 
 
 @pytest.mark.asyncio
-async def test_generate_support_rag_answer_returns_fallback_when_no_chunks() -> None:
+async def test_stream_support_rag_answer_returns_fallback_when_no_chunks() -> None:
     embedding_client = FakeEmbeddingClient()
     vector_store = FakeChatChunkVectorStore()
     responder = DeterministicSupportResponder()
 
-    result = await generate_support_rag_answer(
+    result = await collect_final_answer(
         message="How do I reset my password?",
         embedding_client=embedding_client,
         vector_store=vector_store,
