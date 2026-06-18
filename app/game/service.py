@@ -75,7 +75,15 @@ _ADULT_KEYWORDS = (
     "uncensored",
     "porn",
 )
-_ADULT_GENRES = ("sexual content", "nudity", "nsfw")
+_ADULT_GENRES = (
+    "sexual",
+    "nudity",
+    "nsfw",
+    "adult only",
+    "선정적",
+    "노출",
+    "성인",
+)
 # Steam content descriptor ID: 3=성인 전용 성적 콘텐츠, 4=빈번한 노출·성적 콘텐츠
 # ID 1(일부 성적 콘텐츠)은 주류 M등급 게임도 포함하므로 제외해 오탐을 막는다.
 _ADULT_CONTENT_DESCRIPTOR_IDS = {3, 4}
@@ -128,7 +136,7 @@ def _parse_game_data(
         price_krw = 0
     else:
         price_ov = data.get("price_overview", {})
-        raw = price_ov.get("final")
+        raw = price_ov.get("initial")
         price_krw = raw // 100 if raw is not None else None
         discount_percent = int(price_ov.get("discount_percent") or 0)
 
