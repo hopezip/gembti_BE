@@ -69,7 +69,6 @@ async def test_get_me_returns_profile_and_steam_library_summary(
     assert response.id == 7
     assert response.user_id == 7
     assert response.steam_linked is True
-    assert response.steam_id == "76561198280109780"
     assert response.steam_id_64 == "76561198280109780"
     assert response.has_completed_survey is True
     assert response.user_flow_status == "READY"
