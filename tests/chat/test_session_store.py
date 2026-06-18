@@ -8,6 +8,7 @@ from app.chat.cs import service as support_chat_service
 from app.chat.schemas import SupportChatMessageRequest
 from app.core.config import settings
 from app.core.enums import RedisPurpose
+from app.core.exceptions import ForbiddenException, NotFoundException
 
 
 class FakeRedis:
@@ -49,11 +50,30 @@ class FakeRedis:
             return values[start:]
         return values[start : stop + 1]
 
+    async def hgetall(self, key: str) -> dict[str, str]:
+        return self.hashes.get(key, {})
+
+    async def delete(self, *keys: str) -> int:
+        deleted = 0
+        for key in keys:
+            exists = key in self.hashes or key in self.lists
+            self.hashes.pop(key, None)
+            self.lists.pop(key, None)
+            self.expires.pop(key, None)
+            if exists:
+                deleted += 1
+        return deleted
+
 
 async def collect_support_chat_events(
-    request: SupportChatMessageRequest,
+    request: SupportChatMessageRequest, user_id: int = 1
 ) -> list[dict[str, object]]:
-    return [event async for event in support_chat_service.stream_support_chat_message(request)]
+    return [
+        event
+        async for event in support_chat_service.stream_support_chat_message(
+            request, user_id=user_id
+        )
+    ]
 
 
 def final_support_chat_event(events: list[dict[str, object]]) -> dict[str, object]:
@@ -86,15 +106,15 @@ def test_support_chat_session_turns_key() -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_support_chat_session_stores_session_with_ttl(
+async def test_create_support_chat_session_stores_session_owner_with_ttl(
     fake_redis: FakeRedis,
 ) -> None:
-    session_id = await support_chat_service.create_support_chat_session()
+    session_id = await support_chat_service.create_support_chat_session(user_id=1)
 
     UUID(session_id)
     key = support_chat_service.support_chat_session_key(session_id)
 
-    assert fake_redis.hashes[key] == {"turn_count": "0"}
+    assert fake_redis.hashes[key] == {"turn_count": "0", "user_id": "1"}
     assert fake_redis.expires[key] == settings.SUPPORT_CHAT_SESSION_TTL_SECONDS
 
 
@@ -108,7 +128,7 @@ async def test_stream_support_chat_message_creates_redis_session_when_session_id
 
     key = support_chat_service.support_chat_session_key(str(final_event["session_id"]))
     assert key in fake_redis.hashes
-    assert fake_redis.hashes[key] == {"turn_count": "0"}
+    assert fake_redis.hashes[key] == {"turn_count": "0", "user_id": "1"}
     assert final_event["session_expired"] is False
 
 
@@ -131,7 +151,7 @@ async def test_stream_support_chat_message_reuses_existing_redis_session_and_ref
 ) -> None:
     existing_session_id = "existing-session-id"
     key = support_chat_service.support_chat_session_key(existing_session_id)
-    fake_redis.hashes[key] = {"turn_count": "1"}
+    fake_redis.hashes[key] = {"turn_count": "1", "user_id": "1"}
 
     request = SupportChatMessageRequest(
         message="next message",
@@ -143,6 +163,29 @@ async def test_stream_support_chat_message_reuses_existing_redis_session_and_ref
     assert final_event["session_id"] == existing_session_id
     assert final_event["session_expired"] is False
     assert fake_redis.expires[key] == settings.SUPPORT_CHAT_SESSION_TTL_SECONDS
+
+
+@pytest.mark.asyncio
+async def test_stream_support_chat_message_recreates_session_when_existing_session_owned_by_other_user(
+    fake_redis: FakeRedis,
+) -> None:
+    existing_session_id = "existing-session-id"
+    key = support_chat_service.support_chat_session_key(existing_session_id)
+    fake_redis.hashes[key] = {"turn_count": "1", "user_id": "2"}
+
+    request = SupportChatMessageRequest(
+        message="next message",
+        session_id=existing_session_id,
+    )
+
+    final_event = final_support_chat_event(await collect_support_chat_events(request, user_id=1))
+
+    new_session_id = str(final_event["session_id"])
+    new_key = support_chat_service.support_chat_session_key(new_session_id)
+
+    assert new_session_id != existing_session_id
+    assert final_event["session_expired"] is True
+    assert fake_redis.hashes[new_key] == {"turn_count": "0", "user_id": "1"}
 
 
 @pytest.mark.asyncio
@@ -185,7 +228,7 @@ async def test_save_support_chat_turn_stores_turn_and_keeps_ttl(
 
 
 @pytest.mark.asyncio
-async def test_save_support_chat_turn_keeps_only_recent_three_turns(
+async def test_save_support_chat_turn_keeps_full_ttl_bound_history(
     fake_redis: FakeRedis,
 ) -> None:
     session_id = "session-1"
@@ -199,6 +242,7 @@ async def test_save_support_chat_turn_keeps_only_recent_three_turns(
         )
 
     assert [json.loads(turn) for turn in fake_redis.lists[turns_key]] == [
+        {"user": "hello-0", "assistant": "hi-0"},
         {"user": "hello-1", "assistant": "hi-1"},
         {"user": "hello-2", "assistant": "hi-2"},
         {"user": "hello-3", "assistant": "hi-3"},
@@ -206,12 +250,12 @@ async def test_save_support_chat_turn_keeps_only_recent_three_turns(
 
 
 @pytest.mark.asyncio
-async def test_get_recent_support_chat_turns_returns_saved_turns(
+async def test_get_recent_support_chat_turns_returns_only_recent_three_turns(
     fake_redis: FakeRedis,
 ) -> None:
     session_id = "session-1"
 
-    for i in range(1, 3):
+    for i in range(4):
         await support_chat_service.save_support_chat_turn(
             session_id=session_id,
             user_message=f"hello-{i}",
@@ -223,7 +267,131 @@ async def test_get_recent_support_chat_turns_returns_saved_turns(
     assert turns == [
         {"user": "hello-1", "assistant": "hi-1"},
         {"user": "hello-2", "assistant": "hi-2"},
+        {"user": "hello-3", "assistant": "hi-3"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_get_support_chat_history_returns_owned_session_full_history(
+    fake_redis: FakeRedis,
+) -> None:
+    session_id = "session-1"
+    session_key = support_chat_service.support_chat_session_key(session_id)
+    fake_redis.hashes[session_key] = {"turn_count": "0", "user_id": "1"}
+
+    for i in range(4):
+        await support_chat_service.save_support_chat_turn(
+            session_id=session_id,
+            user_message=f"hello-{i}",
+            assistant_answer=f"hi-{i}",
+        )
+
+    history = await support_chat_service.get_support_chat_history(
+        session_id=session_id,
+        user_id=1,
+    )
+
+    assert history.model_dump() == {
+        "session_id": session_id,
+        "results": [
+            {"role": "user", "message": "hello-0"},
+            {"role": "assistant", "message": "hi-0"},
+            {"role": "user", "message": "hello-1"},
+            {"role": "assistant", "message": "hi-1"},
+            {"role": "user", "message": "hello-2"},
+            {"role": "assistant", "message": "hi-2"},
+            {"role": "user", "message": "hello-3"},
+            {"role": "assistant", "message": "hi-3"},
+        ],
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_support_chat_history_returns_empty_when_session_missing(
+    fake_redis: FakeRedis,
+) -> None:
+    history = await support_chat_service.get_support_chat_history(
+        session_id="missing-session",
+        user_id=1,
+    )
+
+    assert history.model_dump() == {"session_id": None, "results": []}
+
+
+@pytest.mark.asyncio
+async def test_get_support_chat_history_returns_empty_when_session_owned_by_other_user(
+    fake_redis: FakeRedis,
+) -> None:
+    session_id = "session-1"
+    session_key = support_chat_service.support_chat_session_key(session_id)
+    fake_redis.hashes[session_key] = {"turn_count": "0", "user_id": "2"}
+
+    await support_chat_service.save_support_chat_turn(
+        session_id=session_id,
+        user_message="hello",
+        assistant_answer="hi",
+    )
+
+    history = await support_chat_service.get_support_chat_history(
+        session_id=session_id,
+        user_id=1,
+    )
+
+    assert history.model_dump() == {"session_id": None, "results": []}
+
+
+@pytest.mark.asyncio
+async def test_delete_support_chat_session_removes_owned_session_and_turns(
+    fake_redis: FakeRedis,
+) -> None:
+    session_id = "session-1"
+    session_key = support_chat_service.support_chat_session_key(session_id)
+    turns_key = support_chat_service.support_chat_session_turns_key(session_id)
+    fake_redis.hashes[session_key] = {"turn_count": "0", "user_id": "1"}
+    fake_redis.lists[turns_key] = [json.dumps({"user": "hello", "assistant": "hi"})]
+    fake_redis.expires[session_key] = settings.SUPPORT_CHAT_SESSION_TTL_SECONDS
+    fake_redis.expires[turns_key] = settings.SUPPORT_CHAT_SESSION_TTL_SECONDS
+
+    await support_chat_service.delete_support_chat_session(
+        session_id=session_id,
+        user_id=1,
+    )
+
+    assert session_key not in fake_redis.hashes
+    assert turns_key not in fake_redis.lists
+    assert session_key not in fake_redis.expires
+    assert turns_key not in fake_redis.expires
+
+
+@pytest.mark.asyncio
+async def test_delete_support_chat_session_rejects_other_user_session(
+    fake_redis: FakeRedis,
+) -> None:
+    session_id = "session-1"
+    session_key = support_chat_service.support_chat_session_key(session_id)
+    turns_key = support_chat_service.support_chat_session_turns_key(session_id)
+    fake_redis.hashes[session_key] = {"turn_count": "0", "user_id": "2"}
+    fake_redis.lists[turns_key] = [json.dumps({"user": "hello", "assistant": "hi"})]
+
+    with pytest.raises(ForbiddenException, match="삭제 권한 없음"):
+        await support_chat_service.delete_support_chat_session(
+            session_id=session_id,
+            user_id=1,
+        )
+
+    assert session_key in fake_redis.hashes
+    assert turns_key in fake_redis.lists
+
+
+@pytest.mark.asyncio
+async def test_delete_support_chat_session_rejects_missing_session(
+    fake_redis: FakeRedis,
+) -> None:
+    with pytest.raises(NotFoundException, match="존재하지 않는 세션"):
+        await support_chat_service.delete_support_chat_session(
+            session_id="missing-session",
+            user_id=1,
+        )
 
 
 @pytest.mark.asyncio
@@ -303,7 +471,7 @@ async def test_stream_support_chat_message_passes_recent_turns_to_answer_generat
 ) -> None:
     existing_session_id = "existing-session-id"
     key = support_chat_service.support_chat_session_key(existing_session_id)
-    fake_redis.hashes[key] = {"turn_count": "2"}
+    fake_redis.hashes[key] = {"turn_count": "2", "user_id": "1"}
 
     await support_chat_service.save_support_chat_turn(
         session_id=existing_session_id,

@@ -1,8 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from fastapi import BackgroundTasks
-
 from app.core.database import AsyncSessionLocal
 from app.core.enums import RedisPurpose
 from app.core.redis import get_redis
@@ -56,8 +54,7 @@ async def _sync_steam_library_async(user_id: int) -> None:
         await release_steam_library_sync_lock(user_id)
 
 
-async def enqueue_steam_library_sync_if_due(
-    background_tasks: BackgroundTasks,
+async def sync_steam_library_if_due(
     user_id: int,
     last_synced_at: datetime | None,
 ) -> None:
@@ -67,4 +64,4 @@ async def enqueue_steam_library_sync_if_due(
     if not await acquire_steam_library_sync_lock(user_id):
         return
 
-    background_tasks.add_task(_sync_steam_library_async, user_id)
+    await _sync_steam_library_async(user_id)

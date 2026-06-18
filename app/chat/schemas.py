@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, field_validator
 
 
@@ -37,3 +39,17 @@ class SupportChatFinalPayload(BaseModel):
     fallback_used: bool
     session_expired: bool = False
     suggested_next_steps: list[str] | None = None
+
+
+class SupportChatHistoryMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["user", "assistant"]
+    message: str
+
+
+class SupportChatHistoryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str | None
+    results: list[SupportChatHistoryMessage]
