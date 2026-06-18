@@ -10,7 +10,7 @@ from app.chat.rag.service import SupportRagAnswer, SupportRagAnswerFinal, stream
 
 
 async def collect_final_answer(**kwargs: object) -> SupportRagAnswer:
-    async for event in stream_support_rag_answer(**kwargs):
+    async for event in stream_support_rag_answer(**kwargs):  # type: ignore[arg-type]
         if isinstance(event, SupportRagAnswerFinal):
             return event.answer
     raise AssertionError("stream finished without final answer")

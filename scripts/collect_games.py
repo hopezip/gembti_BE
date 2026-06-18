@@ -8,6 +8,9 @@ EC2 Docker DB에 Steam 게임 데이터를 저장한다.
 # 1) 기본: Steam에서 앱 목록을 받아 1,000개 수집
 python scripts/collect_games.py --limit 1000
 
+# 1-1) 인기 게임 위주(SteamSpy 보유자 순) 상위 1,000개 수집
+python scripts/collect_games.py --popular 1 --limit 1000
+
 # 2) 이어받기: 5,001번째 게임부터 1,000개
 python scripts/collect_games.py --offset 5000 --limit 1000
 
@@ -49,7 +52,7 @@ sys.path.insert(0, str(_ROOT))
 
 from app.core.database import AsyncSessionLocal  # noqa: E402
 import app.core.model_registry as _model_registry  # 모든 ORM 모델 등록 (relationship 해결용)  # noqa: E402, F401
-from app.game.client import fetch_app_list  # noqa: E402
+from app.game.client import fetch_app_list, fetch_popular_app_ids  # noqa: E402
 from app.game.repository import get_all_app_ids  # noqa: E402
 from app.game.service import fetch_and_save_games  # noqa: E402
 
@@ -99,7 +102,7 @@ def _clear_checkpoint() -> None:
 # ── 앱 목록 로드 ────────────────────────────────────────────────────────────────
 
 
-async def _load_app_ids(ids_file: str | None) -> list[int]:
+async def _load_app_ids(ids_file: str | None, popular_pages: int) -> list[int]:
     """수집 대상 app_id 목록을 가져온다."""
     if ids_file:
         path = Path(ids_file)
@@ -111,6 +114,15 @@ async def _load_app_ids(ids_file: str | None) -> list[int]:
             return [int(x) for x in data]
         # {"app_ids": [...]} 형식도 허용
         return [int(x) for x in data.get("app_ids", [])]
+
+    if popular_pages > 0:
+        click.echo(f"🔥 SteamSpy 인기 게임 목록 조회 중... ({popular_pages}페이지)", err=True)
+        ids = await fetch_popular_app_ids(pages=popular_pages)
+        if not ids:
+            click.echo("❌ SteamSpy API 실패. 잠시 후 다시 시도하세요.", err=True)
+            sys.exit(1)
+        click.echo(f"   → {len(ids):,}개 앱 조회 완료 (보유자 순)", err=True)
+        return ids
 
     click.echo("📋 Steam 앱 목록 조회 중...", err=True)
     ids = await fetch_app_list()
@@ -241,6 +253,14 @@ async def _collect(
     help="app_id 목록 JSON 파일 경로 (없으면 Steam API 자동 조회)",
 )
 @click.option(
+    "--popular",
+    "popular_pages",
+    default=0,
+    type=int,
+    show_default=True,
+    help="SteamSpy 보유자 순 인기 게임 수집 (페이지 수, 1페이지=1000개). 0=비활성",
+)
+@click.option(
     "--skip-existing/--no-skip-existing",
     default=True,
     show_default=True,
@@ -264,6 +284,7 @@ def main(
     concurrency: int,
     batch_size: int,
     ids_file: str | None,
+    popular_pages: int,
     skip_existing: bool,
     resume: bool,
     save_ids: str | None,
@@ -291,6 +312,7 @@ def main(
             concurrency=concurrency,
             batch_size=batch_size,
             ids_file=ids_file,
+            popular_pages=popular_pages,
             skip_existing=skip_existing,
             checkpoint_data=checkpoint_data,
             save_ids=save_ids,
@@ -304,6 +326,7 @@ async def _main_async(
     concurrency: int,
     batch_size: int,
     ids_file: str | None,
+    popular_pages: int,
     skip_existing: bool,
     checkpoint_data: dict,
     save_ids: str | None,
@@ -311,7 +334,7 @@ async def _main_async(
     t_start = time.monotonic()
 
     # ── 앱 목록 로드 ──────────────────────────────────────────────────────
-    all_ids = await _load_app_ids(ids_file)
+    all_ids = await _load_app_ids(ids_file, popular_pages)
 
     # --save-ids 옵션: 목록만 저장하고 종료
     if save_ids:
