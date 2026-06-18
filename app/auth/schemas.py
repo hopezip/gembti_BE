@@ -242,7 +242,6 @@ class UserResponse(AuthUserResponse):
     user_id: int
     gender: Gender | None = None
     birth_date: date | None = None
-    steam_id: str | None = None
     has_completed_survey: bool = False
     user_flow_status: UserFlowStatus = UserFlowStatus.NEEDS_SURVEY
     steam_library: SteamLibraryResponse

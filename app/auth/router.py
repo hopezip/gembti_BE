@@ -82,7 +82,7 @@ async def verify_email_api(request: EmailCodeVerifyRequest) -> MessageResponse:
     },
 )
 async def check_nickname_api(
-    nickname: str = Query(min_length=2, max_length=8, pattern=r"^[가-힣A-Za-z0-9]+$"),
+    nickname: str = Query(),
     db: AsyncSession = Depends(get_db),
 ) -> NicknameCheckResponse:
     return await check_nickname_available(db, nickname)
