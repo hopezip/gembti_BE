@@ -1,18 +1,20 @@
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user_id, get_db
-from app.core.exceptions import BadRequestException
+from app.core.exceptions import BadRequestException, ConflictException, NotFoundException
 from app.steam.schemas import (
     SteamLinkRequest,
     SteamLinkResponse,
 )
 from app.steam.service import (
     build_steam_login_url,
+    complete_steam_connect,
     complete_steam_login,
     get_frontend_steam_callback_url,
     link_steam_account,
+    start_steam_connect,
 )
 from app.steam.tasks import enqueue_steam_library_sync_if_due
 
@@ -35,6 +37,7 @@ async def steam_auth_login_api() -> RedirectResponse:
 @router.get("/auth/steam/callback", status_code=status.HTTP_302_FOUND)
 async def steam_auth_callback_api(
     request: Request,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
     response = RedirectResponse(
@@ -46,6 +49,7 @@ async def steam_auth_callback_api(
             db=db,
             response=response,
             params=dict(request.query_params),
+            background_tasks=background_tasks,
         )
     except BadRequestException:
         response.headers["location"] = get_frontend_steam_callback_url(
@@ -57,6 +61,55 @@ async def steam_auth_callback_api(
     response.headers["location"] = get_frontend_steam_callback_url(
         result="success",
         is_new_user=is_new_user,
+        steam_linked=True,
+    )
+    return response
+
+
+@router.get(
+    "/steam/connect",
+    status_code=status.HTTP_302_FOUND,
+    responses={
+        401: _err("인증 실패"),
+        500: _err("스팀 연동 서버 오류"),
+    },
+)
+async def steam_connect_api(
+    user_id: int = Depends(get_current_user_id),
+) -> RedirectResponse:
+    return RedirectResponse(
+        await start_steam_connect(user_id),
+        status_code=status.HTTP_302_FOUND,
+    )
+
+
+@router.get("/steam/connect/callback", status_code=status.HTTP_302_FOUND)
+async def steam_connect_callback_api(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    response = RedirectResponse(
+        get_frontend_steam_callback_url(result="success"),
+        status_code=status.HTTP_302_FOUND,
+    )
+    try:
+        await complete_steam_connect(
+            db=db,
+            state=request.query_params.get("state"),
+            params=dict(request.query_params),
+            background_tasks=background_tasks,
+        )
+    except (BadRequestException, ConflictException, NotFoundException):
+        response.headers["location"] = get_frontend_steam_callback_url(
+            result="failed",
+            reason="steam_connect_failed",
+        )
+        return response
+
+    response.headers["location"] = get_frontend_steam_callback_url(
+        result="success",
+        is_new_user=False,
         steam_linked=True,
     )
     return response
@@ -74,12 +127,14 @@ async def steam_auth_callback_api(
 )
 async def steam_link_api(
     request: SteamLinkRequest,
+    background_tasks: BackgroundTasks,
     user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> SteamLinkResponse:
     response = await link_steam_account(db, user_id, request.steam_id)
     await db.commit()
     await enqueue_steam_library_sync_if_due(
+        background_tasks=background_tasks,
         user_id=user_id,
         last_synced_at=None,
     )

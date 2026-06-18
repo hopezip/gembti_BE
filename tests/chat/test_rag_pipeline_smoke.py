@@ -53,7 +53,7 @@ from app.chat.infrastructure.embedding import (
 from app.chat.infrastructure.llm import (
     DeterministicSupportResponder,  # 응답기 Fake + fallback 상수; "지원 문서 기준으로는 ..." 고정 포맷 — network-free
 )
-from app.chat.infrastructure.llm import (  # chunks 비었을 때 기대 문자열 — llm.py 단일 출처
+from app.chat.infrastructure.llm import (
     FALLBACK_ANSWER,
 )
 from app.chat.infrastructure.vector_store import (
@@ -160,14 +160,14 @@ async def test_mock_support_document_flows_through_rag_pipeline() -> (
             content=draft.content,  # 청크 본문 — __post_init__에서 strip 검증
             source=draft.source,  # 예: support.account#chunk-0001 — parse_chat_chunk_source 검증
             embedding_vector=tuple(
-                embedder.embed_text(draft.content)
+                await embedder.embed_text(draft.content)
             ),  # list→tuple: frozen dataclass·DB 호환
         )
         for draft in drafts  # drafts 순회 — 여기서는 1건
     ]
 
     vector_store.upsert(entries)  # Fake 저장소에 적재 — 이후 search 대상
-    query_embedding = embedder.embed_text("How do I reset my password?")  # 사용자 질문 벡터화
+    query_embedding = await embedder.embed_text("How do I reset my password?")  # 사용자 질문 벡터화
     results = vector_store.search(  # 코사인 유사도 top_k — RetrievalResult[] 반환
         query_embedding,
         top_k=3,  # 최대 3건 — fixture는 1청크뿐이라 results 길이 1 기대

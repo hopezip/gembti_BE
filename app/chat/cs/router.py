@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 
 from app.chat.cs import service as support_chat_service
 from app.chat.schemas import SupportChatMessageRequest  # noqa: TC001 - FastAPI body model
@@ -20,6 +20,7 @@ _err = lambda msg: {"content": {"application/json": {"example": {"error": msg}}}
 @router.post(
     "/messages",
     response_model=None,
+    response_class=StreamingResponse,
     dependencies=[Depends(get_current_user_id)],
     responses={
         200: {
@@ -34,27 +35,23 @@ _err = lambda msg: {"content": {"application/json": {"example": {"error": msg}}}
         401: _err("인증이 필요합니다."),
     },
 )
-async def create_support_chat_message(
+async def stream_support_chat_message_endpoint(
     request_body: SupportChatMessageRequest,
-    request: Request,
-) -> JSONResponse | StreamingResponse:
+) -> StreamingResponse:
     support_chat_service.validate_support_chat_message_request(request_body)
 
-    if _client_accepts_event_stream(request):
-        return StreamingResponse(
-            _stream_support_chat_message(request_body),
-            media_type="text/event-stream",
-        )
-
-    payload = await support_chat_service.create_support_chat_message(request_body)
-    return JSONResponse(payload.model_dump(exclude_none=True))
+    return StreamingResponse(
+        _stream_support_chat_message(request_body),
+        media_type="text/event-stream",
+    )
 
 
 async def _stream_support_chat_message(
     request_body: SupportChatMessageRequest,
 ) -> AsyncIterator[str]:
     try:
-        payload = await support_chat_service.create_support_chat_message(request_body)
+        async for event in support_chat_service.stream_support_chat_message(request_body):
+            yield _sse_data(event)
     except Exception:
         yield _sse_data(
             {
@@ -65,17 +62,7 @@ async def _stream_support_chat_message(
         yield "data: [DONE]\n\n"
         return
 
-    if payload.answer:
-        yield _sse_data({"type": "delta", "content": payload.answer})
-
-    final_payload = payload.model_dump(exclude_none=True)
-    final_payload["type"] = "final"
-    yield _sse_data(final_payload)
     yield "data: [DONE]\n\n"
-
-
-def _client_accepts_event_stream(request: Request) -> bool:
-    return "text/event-stream" in request.headers.get("accept", "")
 
 
 def _sse_data(payload: dict[str, object]) -> str:
