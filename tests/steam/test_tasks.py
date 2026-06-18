@@ -1,7 +1,6 @@
 from datetime import UTC, datetime, timedelta
-from typing import cast
+from unittest.mock import AsyncMock, patch
 
-from fastapi import BackgroundTasks
 import pytest
 
 from app.steam import tasks
@@ -56,15 +55,12 @@ def test_is_steam_library_sync_not_due_within_cooldown() -> None:
 
 @pytest.mark.asyncio
 async def test_enqueue_steam_library_sync_if_due_skips_recent_sync() -> None:
-    background_tasks = BackgroundTasks()
-
-    await tasks.enqueue_steam_library_sync_if_due(
-        background_tasks=background_tasks,
-        user_id=7,
-        last_synced_at=datetime.now(UTC),
-    )
-
-    assert background_tasks.tasks == []
+    with patch.object(tasks, "_sync_steam_library_async", new_callable=AsyncMock) as mock_sync:
+        await tasks.sync_steam_library_if_due(
+            user_id=7,
+            last_synced_at=datetime.now(UTC),
+        )
+        mock_sync.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -76,15 +72,12 @@ async def test_enqueue_steam_library_sync_if_due_skips_running_sync(
 
     monkeypatch.setattr(tasks, "get_redis", get_fake_redis)
 
-    background_tasks = BackgroundTasks()
-
-    await tasks.enqueue_steam_library_sync_if_due(
-        background_tasks=background_tasks,
-        user_id=7,
-        last_synced_at=None,
-    )
-
-    assert background_tasks.tasks == []
+    with patch.object(tasks, "_sync_steam_library_async", new_callable=AsyncMock) as mock_sync:
+        await tasks.sync_steam_library_if_due(
+            user_id=7,
+            last_synced_at=None,
+        )
+        mock_sync.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -96,12 +89,9 @@ async def test_enqueue_steam_library_sync_if_due_enqueues_when_due(
 
     monkeypatch.setattr(tasks, "get_redis", get_fake_redis)
 
-    background_tasks = BackgroundTasks()
-
-    await tasks.enqueue_steam_library_sync_if_due(
-        background_tasks=background_tasks,
-        user_id=7,
-        last_synced_at=None,
-    )
-
-    assert len(background_tasks.tasks) == 1
+    with patch.object(tasks, "_sync_steam_library_async", new_callable=AsyncMock) as mock_sync:
+        await tasks.sync_steam_library_if_due(
+            user_id=7,
+            last_synced_at=None,
+        )
+        mock_sync.assert_called_once_with(7)
