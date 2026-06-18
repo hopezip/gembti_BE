@@ -8,6 +8,34 @@ STEAM_APP_REVIEWS_URL = "https://store.steampowered.com/appreviews"
 STEAM_CURRENT_PLAYERS_URL = (
     "https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/"
 )
+STEAMSPY_API_URL = "https://steamspy.com/api.php"
+
+
+async def fetch_popular_app_ids(pages: int = 1) -> list[int]:
+    """SteamSpy에서 보유자 수 기준 인기 게임 app_id를 가져온다.
+
+    - request=all: 보유자(owners) 내림차순, 페이지당 1000개
+    - 키 불필요. 페이지마다 1초 rate-limit 권장.
+    - 반환 순서 = 인기 순위
+    """
+    app_ids: list[int] = []
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        for page in range(pages):
+            try:
+                res = await client.get(
+                    STEAMSPY_API_URL,
+                    params={"request": "all", "page": page},
+                )
+                res.raise_for_status()
+                body = res.json()
+            except (httpx.HTTPError, ValueError):
+                break
+
+            if not body:
+                break
+            app_ids.extend(int(app_id) for app_id in body)
+
+    return app_ids
 
 
 async def fetch_app_details(app_id: int, client: httpx.AsyncClient) -> dict | None:

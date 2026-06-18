@@ -2,6 +2,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.refresh_store import validate_refresh_token
+from app.core.config import settings
 from app.core.dependencies import get_current_user_id, get_db
 from app.core.exceptions import BadRequestException, ConflictException, NotFoundException
 from app.steam.service import (
@@ -9,6 +11,7 @@ from app.steam.service import (
     complete_steam_connect,
     complete_steam_login,
     get_frontend_steam_callback_url,
+    link_steam_for_logged_in_user,
     start_steam_connect,
 )
 
@@ -38,14 +41,34 @@ async def steam_auth_callback_api(
         get_frontend_steam_callback_url(result="success"),
         status_code=status.HTTP_302_FOUND,
     )
+    params = dict(request.query_params)
+
+    refresh_token = request.cookies.get(settings.REFRESH_COOKIE_NAME)
+    current_user_id = await validate_refresh_token(refresh_token) if refresh_token else None
+
     try:
+        if current_user_id is not None:
+            link_response = await link_steam_for_logged_in_user(
+                db=db,
+                user_id=current_user_id,
+                params=params,
+                background_tasks=background_tasks,
+            )
+            response.headers["location"] = get_frontend_steam_callback_url(
+                result="success",
+                is_new_user=False,
+                steam_linked=True,
+                steam_id=link_response.steam_id_64,
+            )
+            return response
+
         user, is_new_user, steam_id_64 = await complete_steam_login(
             db=db,
             response=response,
-            params=dict(request.query_params),
+            params=params,
             background_tasks=background_tasks,
         )
-    except BadRequestException:
+    except (BadRequestException, ConflictException, NotFoundException):
         response.headers["location"] = get_frontend_steam_callback_url(
             result="failed",
             reason="steam_auth_failed",

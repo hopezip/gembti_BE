@@ -67,3 +67,35 @@ def refresh_all_games_task() -> dict:
             return set(await get_all_app_ids(session))
 
     return asyncio.run(_run())
+
+
+@celery_app.task(name="game.refresh_existing_games", time_limit=21600)
+def refresh_existing_games_task() -> dict:
+    """매일 — DB에 있는 기존 게임을 다시 수집해 변동 필드를 갱신한다.
+
+    가격/할인/리뷰/동시접속자 등 시간에 따라 바뀌는 값을 최신화한다.
+    upsert_game이 app_id 충돌 시 갱신하므로 기존 행이 덮어쓰기된다.
+
+    Returns:
+        {"target": int, "success": int, "failed": int}
+    """
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as session:
+            existing_ids = await get_all_app_ids(session)
+
+        total = len(existing_ids)
+        logger.info("기존 게임 갱신 시작: %d개", total)
+
+        success, failed = 0, 0
+        for i in range(0, total, _BATCH_SIZE):
+            batch = existing_ids[i : i + _BATCH_SIZE]
+            async with AsyncSessionLocal() as session:
+                s, f = await fetch_and_save_games(session, batch, concurrency=_SEMAPHORE)
+            success += s
+            failed += f
+
+        logger.info("기존 게임 갱신 완료: 성공 %d / 실패 %d", success, failed)
+        return {"target": total, "success": success, "failed": failed}
+
+    return asyncio.run(_run())
