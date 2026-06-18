@@ -163,21 +163,17 @@ async def get_latest_recommendations(
     return RecommendationGenerateResponse(games=response_games)
 
 
-def calculate_original_price(
-    price_krw: int | None,
+def calculate_sale_price(
+    original_price_krw: int | None,
     discount_percent: int,
 ) -> int | None:
-    if price_krw is None:
+    if original_price_krw is None:
         return None
 
     if discount_percent <= 0:
-        return price_krw
+        return None
 
-    rate = 1 - (discount_percent / 100)
-    if rate <= 0:
-        return price_krw
-
-    return round(price_krw / rate)
+    return int(original_price_krw * (1 - discount_percent / 100))
 
 
 async def get_discounted_recommendations(
@@ -202,11 +198,11 @@ async def get_discounted_recommendations(
             title=item.game.title,
             image_url=item.game.image_url,
             genres=list(item.game.genres),
-            price_krw=item.game.price_krw,
-            original_price_krw=calculate_original_price(
+            price_krw=calculate_sale_price(
                 item.game.price_krw,
                 item.game.discount_percent,
             ),
+            original_price_krw=item.game.price_krw,
             discount_percent=item.game.discount_percent,
             rating=_rating_from_score(item.game.review_score),
             similarity_score=float(item.similarity_score),
