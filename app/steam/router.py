@@ -65,7 +65,13 @@ async def steam_auth_callback_api(
             response=response,
             params=params,
         )
-    except (BadRequestException, ConflictException, NotFoundException):
+    except ConflictException:
+        response.headers["location"] = get_frontend_steam_callback_url(
+            result="failed",
+            reason="steam_already_linked",
+        )
+        return response
+    except (BadRequestException, NotFoundException):
         response.headers["location"] = get_frontend_steam_callback_url(
             result="failed",
             reason="steam_auth_failed",
