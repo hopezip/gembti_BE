@@ -155,7 +155,7 @@ async def complete_steam_login(
     response: Response,
     params: dict[str, str],
     background_tasks: BackgroundTasks,
-) -> tuple[User, bool]:
+) -> tuple[User, bool, int]:
     steam_id_64 = await verify_and_extract_steam_id(params)
     profile = await get_player_summary(steam_id_64)
     avatar_url = None if profile is None else profile.get("avatarfull")
@@ -175,7 +175,7 @@ async def complete_steam_login(
         user_id=user.id,
         last_synced_at=steam_account.last_synced_at,
     )
-    return user, is_new_user
+    return user, is_new_user, steam_id_64
 
 
 async def start_steam_connect(user_id: int) -> str:
