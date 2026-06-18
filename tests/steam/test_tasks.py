@@ -1,8 +1,8 @@
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
-import pytest
 from fastapi import BackgroundTasks
+import pytest
 
 from app.steam import tasks
 
