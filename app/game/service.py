@@ -566,11 +566,16 @@ async def get_game_detail_service(
     movies = detail_json.get("movies") or []
     if movies:
         m = movies[0]
+        webm = m.get("webm") if isinstance(m.get("webm"), dict) else {}
+        mp4 = m.get("mp4") if isinstance(m.get("mp4"), dict) else {}
         trailer_url = (
-            m.get("webm", {}).get("max")
-            or m.get("webm", {}).get("480")
-            or m.get("mp4", {}).get("max")
-            or m.get("mp4", {}).get("480")
+            mp4.get("max")
+            or mp4.get("480")
+            or webm.get("max")
+            or webm.get("480")
+            or m.get("hls_h264")
+            or m.get("dash_h264")
+            or m.get("dash_av1")
         )
 
     audio_langs, iface_langs = _parse_supported_languages(
