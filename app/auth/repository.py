@@ -1,11 +1,8 @@
-from datetime import datetime
-
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.auth.models import User, UserWithdrawalRequest, UserWithdrawalStatus
-from app.core.enums import UserStatus
+from app.auth.models import User
 from app.game.models import Game
 from app.stat.models import UserStats
 from app.steam.models import UserLibraryGame
@@ -61,32 +58,6 @@ async def save_user(db: AsyncSession, user: User) -> User:
     return user
 
 
-async def get_requested_withdrawal_by_user_id(
-    db: AsyncSession,
-    user_id: int,
-) -> UserWithdrawalRequest | None:
-    result = await db.execute(
-        select(UserWithdrawalRequest).where(
-            UserWithdrawalRequest.user_id == user_id,
-            UserWithdrawalRequest.status == UserWithdrawalStatus.REQUESTED,
-        )
-    )
-    return result.scalar_one_or_none()
-
-
-async def get_expired_withdrawal_requests(
-    db: AsyncSession,
-    now: datetime,
-) -> list[UserWithdrawalRequest]:
-    result = await db.execute(
-        select(UserWithdrawalRequest)
-        .options(selectinload(UserWithdrawalRequest.user))
-        .join(User)
-        .where(
-            UserWithdrawalRequest.status == UserWithdrawalStatus.REQUESTED,
-            UserWithdrawalRequest.hard_delete_after <= now,
-            User.status == UserStatus.WITHDRAWN,
-            User.deleted_at.is_(None),
-        )
-    )
-    return list(result.scalars().all())
+async def delete_user_by_id(db: AsyncSession, user_id: int) -> None:
+    await db.execute(delete(User).where(User.id == user_id))
+    await db.flush()
