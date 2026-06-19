@@ -10,7 +10,12 @@ from app.auth.repository import get_user_by_email, get_user_by_id, get_user_by_n
 from app.auth.service import issue_auth_tokens
 from app.core.config import settings
 from app.core.enums import LoginProvider, UserStatus
-from app.core.exceptions import BadRequestException, ConflictException, NotFoundException
+from app.core.exceptions import (
+    BadRequestException,
+    ConflictException,
+    ForbiddenException,
+    NotFoundException,
+)
 from app.steam.client import (
     SteamLibraryVisibility,
     build_steam_openid_url,
@@ -20,6 +25,7 @@ from app.steam.client import (
 )
 from app.steam.models import SteamAccount, SteamSyncStatus, UserLibraryGame
 from app.steam.repository import (
+    delete_steam_connection,
     get_steam_account_by_steam_id,
     get_steam_account_by_user_id,
     save_steam_account,
@@ -30,6 +36,7 @@ from app.steam.schemas import (
     SteamCompleteSignupResponse,
     SteamLinkResponse,
     SteamSyncResponse,
+    SteamUnlinkResponse,
 )
 from app.steam.signup_store import (
     consume_steam_signup_session,
@@ -275,6 +282,20 @@ async def link_steam_account(
     )
 
 
+async def unlink_steam_account(db: AsyncSession, user_id: int) -> SteamUnlinkResponse:
+    user = await get_user_by_id(db, user_id)
+    if user is None:
+        raise NotFoundException("사용자를 찾을 수 없습니다.")
+    if user.login_provider == LoginProvider.STEAM:
+        raise ForbiddenException("Steam 로그인 계정은 연동을 해제할 수 없습니다.")
+    if await get_steam_account_by_user_id(db, user_id) is None:
+        raise NotFoundException("Steam 계정이 연동되어 있지 않습니다.")
+
+    await delete_steam_connection(db, user_id)
+    await db.commit()
+    return SteamUnlinkResponse(message="Steam 계정 연동이 해제되었습니다.")
+
+
 async def sync_steam_library(db: AsyncSession, user_id: int) -> SteamSyncResponse:
     steam_account = await get_steam_account_by_user_id(db, user_id)
     if steam_account is None:
@@ -310,6 +331,12 @@ async def sync_steam_library(db: AsyncSession, user_id: int) -> SteamSyncRespons
         next=get_next_step_for_sync_status(steam_account.steam_sync_status),
         message=get_message_for_sync_status(steam_account.steam_sync_status),
     )
+
+
+async def sync_steam_library_now(db: AsyncSession, user_id: int) -> SteamSyncResponse:
+    result = await sync_steam_library(db, user_id)
+    await db.commit()
+    return result
 
 
 def build_user_library_game(
