@@ -1,4 +1,4 @@
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -44,11 +44,6 @@ async def get_library_games_by_user_id(
         .order_by(UserLibraryGame.playtime_minutes.desc(), UserLibraryGame.steam_app_id.asc())
     )
     return list(result.scalars().all())
-
-
-async def delete_steam_account_by_user_id(db: AsyncSession, user_id: int) -> None:
-    await db.execute(delete(UserLibraryGame).where(UserLibraryGame.user_id == user_id))
-    await db.execute(delete(SteamAccount).where(SteamAccount.user_id == user_id))
 
 
 async def upsert_library_games(

@@ -20,7 +20,6 @@ from app.steam.client import (
 )
 from app.steam.models import SteamAccount, SteamSyncStatus, UserLibraryGame
 from app.steam.repository import (
-    delete_steam_account_by_user_id,
     get_steam_account_by_steam_id,
     get_steam_account_by_user_id,
     save_steam_account,
@@ -188,14 +187,6 @@ async def link_steam_for_logged_in_user(
         last_synced_at=None,
     )
     return response
-
-
-async def unlink_steam_account(db: AsyncSession, user_id: int) -> None:
-    steam_account = await get_steam_account_by_user_id(db, user_id)
-    if steam_account is None:
-        raise NotFoundException("연동된 Steam 계정이 없습니다.")
-    await delete_steam_account_by_user_id(db, user_id)
-    await db.commit()
 
 
 async def complete_steam_signup(
