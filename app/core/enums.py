@@ -16,8 +16,6 @@ class LoginProvider(StrEnum):
 class UserStatus(StrEnum):
     ACTIVE = "active"
     INACTIVE = "inactive"
-    WITHDRAWN = "withdrawn"
-    DELETED = "deleted"
 
 
 class Gender(StrEnum):

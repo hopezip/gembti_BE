@@ -26,12 +26,6 @@ class EmailVerificationStatus(StrEnum):
     EXPIRED = "EXPIRED"
 
 
-class UserWithdrawalStatus(StrEnum):
-    REQUESTED = "REQUESTED"
-    CANCELLED = "CANCELLED"
-    HARD_DELETED = "HARD_DELETED"
-
-
 class User(Base):
     __tablename__ = "users"
 
@@ -56,13 +50,6 @@ class User(Base):
         nullable=True,
     )
     birth_date: Mapped[Date | None] = mapped_column(Date, nullable=True)
-    withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    hard_delete_after: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-        index=True,
-    )
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -88,11 +75,6 @@ class User(Base):
     )
     email_verifications: Mapped[list[EmailVerification]] = relationship(
         "EmailVerification",
-        back_populates="user",
-        cascade="all, delete-orphan",
-    )
-    withdrawal_requests: Mapped[list[UserWithdrawalRequest]] = relationship(
-        "UserWithdrawalRequest",
         back_populates="user",
         cascade="all, delete-orphan",
     )
@@ -174,50 +156,3 @@ class EmailVerification(Base):
     )
 
     user: Mapped[User | None] = relationship(back_populates="email_verifications")
-
-
-class UserWithdrawalRequest(Base):
-    __tablename__ = "user_withdrawal_requests"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    reason: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[UserWithdrawalStatus] = mapped_column(
-        Enum(
-            UserWithdrawalStatus,
-            name="user_withdrawal_status",
-            values_callable=enum_values,
-        ),
-        nullable=False,
-        default=UserWithdrawalStatus.REQUESTED,
-        index=True,
-    )
-    requested_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-    )
-    hard_delete_after: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        index=True,
-    )
-    hard_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
-
-    user: Mapped[User] = relationship(back_populates="withdrawal_requests")

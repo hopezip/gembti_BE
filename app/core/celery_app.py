@@ -8,7 +8,6 @@ celery_app = Celery(
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
     include=[
-        "app.auth.tasks",
         "app.game.tasks",
         # "app.chat.tasks",
         # "app.recommend.tasks",
@@ -32,10 +31,6 @@ celery_app.conf.update(
         "refresh-existing-games-every-day": {
             "task": "game.refresh_existing_games",
             "schedule": crontab(hour=5, minute=0),  # 매일 05:00 KST
-        },
-        "cleanup-withdrawn-users-every-day": {
-            "task": "app.auth.tasks.cleanup_withdrawn_users",
-            "schedule": crontab(hour=4, minute=0),  # 매일 04:00 KST
         },
     },
 )
