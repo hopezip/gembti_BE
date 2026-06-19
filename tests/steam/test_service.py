@@ -5,6 +5,8 @@ from typing import cast
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.enums import LoginProvider
+from app.core.exceptions import ForbiddenException, NotFoundException
 from app.steam import service
 from app.steam.client import SteamLibraryVisibility, SteamOwnedGamesResult
 from app.steam.models import SteamAccount, SteamSyncStatus, UserLibraryGame
@@ -143,3 +145,73 @@ async def test_sync_steam_library_private_moves_to_survey(
     assert "비공개" in result.message
     assert steam_account.steam_sync_status == SteamSyncStatus.PRIVATE
     assert db.flushed is True
+
+
+@pytest.mark.asyncio
+async def test_unlink_steam_account_deletes_email_users_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = SimpleNamespace(login_provider=LoginProvider.EMAIL)
+    deleted_user_ids: list[int] = []
+
+    async def get_user_by_id(db: AsyncSession, user_id: int) -> object:
+        return user
+
+    async def get_steam_account_by_user_id(
+        db: AsyncSession,
+        user_id: int,
+    ) -> SteamAccount:
+        return cast("SteamAccount", SimpleNamespace(user_id=user_id))
+
+    async def delete_steam_connection(db: AsyncSession, user_id: int) -> None:
+        deleted_user_ids.append(user_id)
+
+    class FakeSession:
+        committed = False
+
+        async def commit(self) -> None:
+            self.committed = True
+
+    monkeypatch.setattr(service, "get_user_by_id", get_user_by_id)
+    monkeypatch.setattr(service, "get_steam_account_by_user_id", get_steam_account_by_user_id)
+    monkeypatch.setattr(service, "delete_steam_connection", delete_steam_connection)
+
+    db = FakeSession()
+    result = await service.unlink_steam_account(cast("AsyncSession", db), user_id=7)
+
+    assert result.steam_linked is False
+    assert deleted_user_ids == [7]
+    assert db.committed is True
+
+
+@pytest.mark.asyncio
+async def test_unlink_steam_account_rejects_steam_login_user(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def get_user_by_id(db: AsyncSession, user_id: int) -> object:
+        return SimpleNamespace(login_provider=LoginProvider.STEAM)
+
+    monkeypatch.setattr(service, "get_user_by_id", get_user_by_id)
+
+    with pytest.raises(ForbiddenException):
+        await service.unlink_steam_account(cast("AsyncSession", object()), user_id=7)
+
+
+@pytest.mark.asyncio
+async def test_unlink_steam_account_requires_linked_account(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def get_user_by_id(db: AsyncSession, user_id: int) -> object:
+        return SimpleNamespace(login_provider=LoginProvider.EMAIL)
+
+    async def get_steam_account_by_user_id(
+        db: AsyncSession,
+        user_id: int,
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(service, "get_user_by_id", get_user_by_id)
+    monkeypatch.setattr(service, "get_steam_account_by_user_id", get_steam_account_by_user_id)
+
+    with pytest.raises(NotFoundException):
+        await service.unlink_steam_account(cast("AsyncSession", object()), user_id=7)
