@@ -1,9 +1,8 @@
 from app.core.celery_app import celery_app
 
 
-def test_cleanup_withdrawn_users_is_registered_in_beat_schedule() -> None:
+def test_withdrawal_cleanup_is_not_registered_in_beat_schedule() -> None:
     schedule = celery_app.conf.beat_schedule
 
-    cleanup_schedule = schedule["cleanup-withdrawn-users-every-day"]
-
-    assert cleanup_schedule["task"] == "app.auth.tasks.cleanup_withdrawn_users"
+    assert "cleanup-withdrawn-users-every-day" not in schedule
+    assert "app.auth.tasks" not in celery_app.conf.include

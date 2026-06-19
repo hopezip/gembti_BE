@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
 import re
 import secrets
 from typing import TYPE_CHECKING, cast
-
-from sqlalchemy import delete
 
 from app.auth.cookie import delete_refresh_cookie, set_refresh_cookie
 from app.auth.email_sender import send_verification_email
@@ -15,12 +12,7 @@ from app.auth.email_verification_store import (
     save_verification_code,
     verify_email_code,
 )
-from app.auth.models import (
-    EmailVerificationPurpose,
-    User,
-    UserWithdrawalRequest,
-    UserWithdrawalStatus,
-)
+from app.auth.models import EmailVerificationPurpose, User
 from app.auth.refresh_store import (
     delete_all_refresh_tokens_for_user,
     delete_refresh_token,
@@ -28,8 +20,7 @@ from app.auth.refresh_store import (
     validate_refresh_token,
 )
 from app.auth.repository import (
-    get_expired_withdrawal_requests,
-    get_requested_withdrawal_by_user_id,
+    delete_user_by_id,
     get_user_by_email,
     get_user_by_id,
     get_user_by_nickname,
@@ -72,7 +63,6 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
-from app.steam.models import SteamAccount, UserLibraryGame
 
 if TYPE_CHECKING:
     from datetime import date
@@ -81,8 +71,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from app.game.models import Game
-
-WITHDRAWAL_GRACE_PERIOD_DAYS = 14
+    from app.steam.models import UserLibraryGame
 
 
 async def issue_auth_tokens(
@@ -423,62 +412,12 @@ async def withdraw_user(
         if not verify_password(request.password, user.password_hash):
             raise BadRequestException("비밀번호가 일치하지 않습니다.")
 
-    if await get_requested_withdrawal_by_user_id(db, user.id):
-        raise ForbiddenException("이미 탈퇴했거나 사용할 수 없는 계정입니다.")
-
-    now = datetime.now(UTC)
-    hard_delete_after = now + timedelta(days=WITHDRAWAL_GRACE_PERIOD_DAYS)
-
-    user.status = UserStatus.WITHDRAWN
-    user.withdrawn_at = now
-    user.hard_delete_after = hard_delete_after
-
-    db.add(
-        UserWithdrawalRequest(
-            user_id=user.id,
-            reason=request.reason,
-            detail=request.detail,
-            hard_delete_after=hard_delete_after,
-        )
-    )
-    await db.commit()
-
     await delete_all_refresh_tokens_for_user(user.id)
     await blacklist_access_token(access_token)
     if refresh_token is not None:
         await delete_refresh_token(refresh_token, user_id=user.id)
     delete_refresh_cookie(response)
 
-    return WithdrawResponse(
-        message="회원 탈퇴 요청이 완료되었습니다.",
-        hard_delete_after=hard_delete_after,
-    )
-
-
-async def cleanup_expired_withdrawn_users(
-    db: AsyncSession,
-    now: datetime | None = None,
-) -> int:
-    cleanup_time = now or datetime.now(UTC)
-    withdrawal_requests = await get_expired_withdrawal_requests(db, cleanup_time)
-
-    for withdrawal_request in withdrawal_requests:
-        user = withdrawal_request.user
-        user.email = f"deleted_{user.id}@deleted.local"
-        user.nickname = f"deleted_user_{user.id}"
-        user.password_hash = None
-        user.bio = None
-        user.gender = None
-        user.birth_date = None
-        user.status = UserStatus.DELETED
-        user.deleted_at = cleanup_time
-
-        withdrawal_request.status = UserWithdrawalStatus.HARD_DELETED
-        withdrawal_request.hard_deleted_at = cleanup_time
-
-        await db.execute(delete(SteamAccount).where(SteamAccount.user_id == user.id))
-        await db.execute(delete(UserLibraryGame).where(UserLibraryGame.user_id == user.id))
-        await delete_all_refresh_tokens_for_user(user.id)
-
+    await delete_user_by_id(db, user.id)
     await db.commit()
-    return len(withdrawal_requests)
+    return WithdrawResponse(message="회원 탈퇴가 완료되었습니다.")
