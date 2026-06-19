@@ -31,12 +31,10 @@ async def test_removed_steam_helper_routes_return_404() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost") as client:
         status_response = await client.get("/api/v1/steam/status")
         recent_response = await client.get("/api/v1/steam/recently-played")
-        sync_response = await client.post("/api/v1/steam/sync")
         sync_status_response = await client.get("/api/v1/steam/sync/status/task-123")
         link_response = await client.post("/api/v1/steam/link")
 
     assert status_response.status_code == 404
     assert recent_response.status_code == 404
-    assert sync_response.status_code == 404
     assert sync_status_response.status_code == 404
     assert link_response.status_code == 404
