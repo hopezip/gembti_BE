@@ -22,11 +22,6 @@ class SteamLinkResponse(BaseModel):
     steam_sync_status: SteamSyncStatus
 
 
-class SteamUnlinkResponse(BaseModel):
-    steam_linked: bool = False
-    message: str
-
-
 class SteamCallbackResult(BaseModel):
     result: str
     is_new_user: bool = False

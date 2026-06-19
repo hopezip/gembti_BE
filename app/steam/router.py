@@ -4,16 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.refresh_store import validate_refresh_token
 from app.core.config import settings
-from app.core.dependencies import get_current_user_id, get_db
+from app.core.dependencies import get_db
 from app.core.exceptions import BadRequestException, ConflictException, NotFoundException
-from app.steam.schemas import SteamSyncResponse, SteamUnlinkResponse
 from app.steam.service import (
     build_steam_login_url,
     complete_steam_login,
     get_frontend_steam_callback_url,
     link_steam_for_logged_in_user,
-    sync_steam_library_now,
-    unlink_steam_account,
 )
 
 router = APIRouter(tags=["Steam"])
@@ -86,34 +83,3 @@ async def steam_auth_callback_api(
         steam_id=str(steam_id_64),
     )
     return response
-
-
-@router.delete(
-    "/steam/unlink",
-    response_model=SteamUnlinkResponse,
-    responses={
-        401: _err("인증 실패"),
-        403: _err("Steam 로그인 계정은 연동을 해제할 수 없습니다."),
-        404: _err("Steam 계정이 연동되어 있지 않습니다."),
-    },
-)
-async def steam_unlink_api(
-    user_id: int = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
-) -> SteamUnlinkResponse:
-    return await unlink_steam_account(db, user_id)
-
-
-@router.post(
-    "/steam/sync",
-    response_model=SteamSyncResponse,
-    responses={
-        401: _err("인증 실패"),
-        404: _err("Steam 계정이 연동되어 있지 않습니다."),
-    },
-)
-async def steam_sync_api(
-    user_id: int = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
-) -> SteamSyncResponse:
-    return await sync_steam_library_now(db, user_id)
