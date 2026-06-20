@@ -96,3 +96,49 @@ def test_build_chat_messages_sets_core_support_policy() -> None:
     assert "추측하지" in system_message
     assert "개인화 게임 추천을 직접 생성" in system_message
     assert "민감정보를 요청하지" in system_message
+
+
+def test_build_chat_messages_requires_conditional_narrowing_for_ambiguous_support_queries() -> None:
+    chunk = ChatChunkHit(
+        content=(
+            "Steam 라이브러리 정보를 GEMBTI가 활용하려면 Steam에서 필요한 정보가 "
+            "공개되어 있어야 합니다."
+        ),
+        source="support.steam#chunk-0001",
+    )
+
+    messages = _build_chat_messages(
+        question="라이브러리",
+        chunks=(chunk,),
+    )
+
+    combined_prompt = "\n".join(message["content"] for message in messages)
+
+    assert "짧거나 다의적인 고객센터 질문" in combined_prompt
+    assert "Steam 라이브러리를 말씀하시는 거라면" in combined_prompt
+    assert "참고 문서가 제공된 경우" in combined_prompt
+    assert "제공된 자료에서 답을 찾을 수 없습니다" in combined_prompt
+    assert "이 문구로 시작하지 마세요" in combined_prompt
+
+
+def test_build_chat_messages_requires_broad_failure_narrowing_when_chunks_exist() -> None:
+    chunk = ChatChunkHit(
+        content=(
+            "“안 돼요”, “안 떠요”, “안 보여요”처럼 범위가 넓은 질문에는 화면 이름, "
+            "눌렀던 버튼, 표시된 오류 문구를 함께 알려 달라고 안내할 수 있습니다."
+        ),
+        source="support.troubleshooting#chunk-0001",
+    )
+
+    messages = _build_chat_messages(
+        question="안 떠요",
+        chunks=(chunk,),
+    )
+
+    combined_prompt = "\n".join(message["content"] for message in messages)
+
+    assert "안 떠요" in combined_prompt
+    assert "화면 이름" in combined_prompt
+    assert "눌렀던 버튼" in combined_prompt
+    assert "표시된 오류 문구" in combined_prompt
+    assert "조건부 안내" in combined_prompt

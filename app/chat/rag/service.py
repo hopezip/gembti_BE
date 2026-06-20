@@ -14,6 +14,7 @@ from app.chat.rag.chunking import (
     load_support_help_documents,
 )
 from app.chat.rag.model import SUPPORT_RAG_SETTINGS
+from app.chat.rag.query import analyze_support_query
 from app.chat.schemas import SupportChatCitation
 
 if TYPE_CHECKING:
@@ -90,16 +91,31 @@ async def _retrieve_support_rag_chunks(
     embedding_client: EmbeddingClient,
     vector_store: ChatChunkVectorStore,
 ) -> list[RetrievalResult]:
+    analysis = analyze_support_query(message)
+    if analysis.support_intent == "likely_off_topic":
+        return []
+
     query_embedding = await embedding_client.embed_text(message)
     raw_retrieval_results = vector_store.search(
         query_embedding,
         top_k=SUPPORT_RAG_SETTINGS.top_k,
     )
-    return (
+    dense_results = (
         await raw_retrieval_results
         if inspect.isawaitable(raw_retrieval_results)
         else raw_retrieval_results
     )
+
+    raw_lexical_results = vector_store.search_lexical(
+        analysis,
+        top_k=SUPPORT_RAG_SETTINGS.top_k,
+    )
+    lexical_results = (
+        await raw_lexical_results
+        if inspect.isawaitable(raw_lexical_results)
+        else raw_lexical_results
+    )
+    return _merge_retrieval_results(dense_results, lexical_results)
 
 
 async def ingest_support_help_documents(
@@ -155,3 +171,22 @@ def _build_citations(retrieval_results: list[RetrievalResult]) -> list[SupportCh
             )
         )
     return citations
+
+
+def _merge_retrieval_results(
+    dense_results: list[RetrievalResult],
+    lexical_results: list[RetrievalResult],
+) -> list[RetrievalResult]:
+    by_source: dict[str, RetrievalResult] = {}
+    source_order: dict[str, int] = {}
+    for result in [*dense_results, *lexical_results]:
+        source = result.chunk.source
+        source_order.setdefault(source, len(source_order))
+        current = by_source.get(source)
+        if current is None or result.score > current.score:
+            by_source[source] = result
+
+    return sorted(
+        by_source.values(),
+        key=lambda result: (-result.score, source_order[result.chunk.source]),
+    )[: SUPPORT_RAG_SETTINGS.top_k]
