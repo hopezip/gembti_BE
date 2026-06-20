@@ -72,10 +72,31 @@ def test_build_chat_messages_formats_prompt_template_with_reference_and_question
     assert "{user_query}" in prompt_template
 
     assert "[참고 문서]" in prompt_message
-    assert "support.account#chunk-0001" in prompt_message
+    assert "[참고 문서 1]" in prompt_message
+    assert "support.account#chunk-0001" not in prompt_message
     assert "password reset is available" in prompt_message
     assert "[질문]" in prompt_message
     assert "how do I reset my password?" in prompt_message
+
+
+def test_build_chat_messages_forbids_user_visible_source_labels() -> None:
+    chunk = ChatChunkHit(
+        content="steam sync is available from the settings",
+        source="support.steam#chunk-0001",
+    )
+
+    messages = _build_chat_messages(
+        question="how do I sync steam?",
+        chunks=(chunk,),
+    )
+
+    combined_prompt = "\n".join(message["content"] for message in messages)
+
+    assert "출처를 표시하세요" not in combined_prompt
+    assert "출처를 `출처: support.account#chunk-0001`처럼" not in combined_prompt
+    assert "답변 본문에는 참고 문서 출처" in combined_prompt
+    assert "참고 문서 번호" in combined_prompt
+    assert "support.steam#chunk-0001" not in combined_prompt
 
 
 def test_build_chat_messages_sets_core_support_policy() -> None:
