@@ -5,7 +5,7 @@
 # 기본: OpenAI와 DB를 호출하지 않고 문서 파싱과 chunk 생성만 확인
 uv run python scripts/ingest_support_help.py
 
-# 실제 적재: OpenAI embedding을 만들고 chat_chunk 테이블에 저장
+# 실제 적재: OpenAI embedding을 만들고 기존 support 청크를 현재 문서 기준으로 교체 저장
 uv run python scripts/ingest_support_help.py --apply
 
 Docker 컨테이너 안에서 실제 적재하는 경우
@@ -84,6 +84,7 @@ async def _run_ingest(directory: Path) -> None:
                 score_threshold=SUPPORT_RAG_SETTINGS.score_threshold,
             ),
             directory=directory,
+            replace_existing=True,
         )
         await db.commit()
 
