@@ -57,6 +57,7 @@ from app.core.exceptions import (
     NotFoundException,
     UnauthorizedException,
 )
+from app.core.recommendation.schemas import _rating_from_score
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -302,7 +303,7 @@ def build_library_game_response(
         playtime_hours=minutes_to_hours(library_game.playtime_minutes),
         last_played_at=library_game.last_played_at,
         synced_at=library_game.synced_at,
-        rating=None if game is None or game.review_score is None else float(game.review_score),
+        rating=None if game is None else _rating_from_score(game.review_score),
     )
 
 

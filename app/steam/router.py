@@ -110,6 +110,8 @@ async def steam_unlink_api(
     responses={
         401: _err("인증 실패"),
         404: _err("Steam 계정이 연동되어 있지 않습니다."),
+        500: _err("Steam 라이브러리 저장 결과가 API 게임 수와 일치하지 않습니다."),
+        502: _err("Steam API 응답의 게임 수가 일치하지 않습니다."),
     },
 )
 async def steam_sync_api(
