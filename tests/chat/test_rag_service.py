@@ -6,7 +6,12 @@ from app.chat.infrastructure.vector_store import (
     ChatChunkVectorWrite,
     FakeChatChunkVectorStore,
 )
-from app.chat.rag.service import SupportRagAnswer, SupportRagAnswerFinal, stream_support_rag_answer
+from app.chat.rag.service import (
+    SupportRagAnswer,
+    SupportRagAnswerFinal,
+    ingest_support_help_documents,
+    stream_support_rag_answer,
+)
 
 
 async def collect_final_answer(**kwargs: object) -> SupportRagAnswer:
@@ -138,3 +143,53 @@ async def test_stream_support_rag_answer_returns_fallback_when_no_chunks() -> No
     assert result.answer == FALLBACK_ANSWER
     assert result.citations == []
     assert result.fallback_used is True
+
+
+@pytest.mark.asyncio
+async def test_ingest_support_help_documents_can_replace_stale_support_chunks(tmp_path) -> None:
+    help_dir = tmp_path / "support"
+    help_dir.mkdir()
+    (help_dir / "general.md").write_text(
+        """---
+doc_id: support.general
+title: General help
+category: general
+status: published
+visibility: public
+tags:
+  - support
+updated_at: 2026-06-22
+reviewed_at: 2026-06-22
+---
+
+# General help
+
+## Intro
+
+GEMBTI 서비스 사이트 소개입니다.
+""",
+        encoding="utf-8",
+    )
+    embedding_client = FakeEmbeddingClient()
+    vector_store = FakeChatChunkVectorStore()
+    stale_content = "old deleted chunk"
+    vector_store.upsert(
+        [
+            ChatChunkVectorWrite(
+                content=stale_content,
+                source="support.general#chunk-9999",
+                embedding_vector=tuple(await embedding_client.embed_text(stale_content)),
+            )
+        ]
+    )
+
+    result = await ingest_support_help_documents(
+        embedding_client=embedding_client,
+        vector_store=vector_store,
+        directory=help_dir,
+        replace_existing=True,
+    )
+
+    assert result.document_count == 1
+    assert result.chunk_count == 1
+    assert [entry.source for entry in vector_store.entries] == ["support.general#chunk-0001"]
