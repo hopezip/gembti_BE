@@ -15,6 +15,9 @@ import unicodedata
 SupportIntent = Literal["likely_support", "ambiguous_support", "likely_off_topic"]
 
 _SUPPORT_TERM_RULES: tuple[tuple[str, tuple[str, ...], tuple[str, ...], bool], ...] = (
+    ("gembti", ("GEMBTI", "서비스", "사이트"), ("general",), False),
+    ("서비스", ("GEMBTI", "서비스", "사이트"), ("general",), True),
+    ("사이트", ("GEMBTI", "서비스", "사이트"), ("general",), True),
     ("steam", ("steam",), ("steam",), False),
     ("스팀연동", ("steam", "연동"), ("steam",), False),
     ("steam연동", ("steam", "연동"), ("steam",), False),

@@ -39,6 +39,9 @@ def test_analyze_support_query_recovers_bare_library_as_ambiguous_support() -> N
 @pytest.mark.parametrize(
     ("query", "expected_category"),
     [
+        ("GEMBTI가 뭐야?", "general"),
+        ("이 서비스는 뭐야?", "general"),
+        ("이 사이트 뭐 하는 곳이야?", "general"),
         ("회원가입", "account"),
         ("성향 스탯이 없다고 나와요", "recommendation"),
         ("내 취향에 맞는 게임 하나 바로 골라줘", "recommendation"),
@@ -55,3 +58,12 @@ def test_analyze_support_query_covers_eval_set_support_terms(
 
     assert analysis.support_intent != "likely_off_topic"
     assert expected_category in analysis.category_hints
+
+
+@pytest.mark.parametrize("query", ["GEMBTI", "서비스", "사이트"])
+def test_analyze_support_query_expands_service_intro_terms(query: str) -> None:
+    analysis = _analyze(query)
+
+    assert analysis.support_intent != "likely_off_topic"
+    assert analysis.category_hints == ("general",)
+    assert analysis.support_terms == ("GEMBTI", "서비스", "사이트")

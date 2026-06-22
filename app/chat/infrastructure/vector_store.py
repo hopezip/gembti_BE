@@ -79,6 +79,12 @@ class ChatChunkVectorStore(Protocol):
     def upsert(self, entries: Iterable[ChatChunkVectorWrite]) -> VectorUpsertResult:
         """임베딩된 청크를 지식 벡터 저장소에 삽입하거나 갱신(upsert)한다."""
 
+    def replace_support_corpus(
+        self,
+        entries: Iterable[ChatChunkVectorWrite],
+    ) -> VectorUpsertResult:
+        """기존 고객센터 support 청크를 현재 적재 목록으로 교체한다."""
+
 
 class FakeChatChunkVectorStore:
     """네트워크 없는 테스트용 결정론적 인메모리 벡터 저장소.
@@ -101,6 +107,11 @@ class FakeChatChunkVectorStore:
         for entry in normalized_entries:
             by_source[entry.source] = entry
         self.entries = list(by_source.values())
+
+    def replace_support_corpus(self, entries: Iterable[ChatChunkVectorWrite]) -> None:
+        normalized_entries = list(entries)
+        self.upsert_calls.append(normalized_entries)
+        self.entries = normalized_entries
 
     def search(
         self,
@@ -210,6 +221,15 @@ WHERE source = :source
 """.strip()
 
     @staticmethod
+    def build_delete_support_corpus_query() -> str:
+        """현재 고객센터 support corpus를 다시 적재하기 전 기존 support 청크를 제거한다."""
+
+        return """
+DELETE FROM chat_chunk
+WHERE source LIKE 'support.%#chunk-%'
+""".strip()
+
+    @staticmethod
     def build_insert_query() -> str:
         """``chat_chunk`` 행 삽입 SQL을 만든다."""
 
@@ -236,6 +256,20 @@ LIMIT :candidate_limit
         insert_query = _sql_text(self.build_insert_query())
         for entry in entries:
             self._session.execute(delete_query, {"source": entry.source})
+            self._session.execute(
+                insert_query,
+                {
+                    "content": entry.content,
+                    "source": entry.source,
+                    "embedding_vector": _pgvector_literal(entry.embedding_vector),
+                },
+            )
+        return None
+
+    def replace_support_corpus(self, entries: Iterable[ChatChunkVectorWrite]) -> VectorUpsertResult:
+        self._session.execute(_sql_text(self.build_delete_support_corpus_query()))
+        insert_query = _sql_text(self.build_insert_query())
+        for entry in entries:
             self._session.execute(
                 insert_query,
                 {
@@ -306,6 +340,19 @@ class AsyncPgvectorChatChunkVectorStore(PgvectorChatChunkVectorStore):
         insert_query = _sql_text(self.build_insert_query())
         for entry in entries:
             await self._session.execute(delete_query, {"source": entry.source})
+            await self._session.execute(
+                insert_query,
+                {
+                    "content": entry.content,
+                    "source": entry.source,
+                    "embedding_vector": _pgvector_literal(entry.embedding_vector),
+                },
+            )
+
+    async def replace_support_corpus(self, entries: Iterable[ChatChunkVectorWrite]) -> None:
+        await self._session.execute(_sql_text(self.build_delete_support_corpus_query()))
+        insert_query = _sql_text(self.build_insert_query())
+        for entry in entries:
             await self._session.execute(
                 insert_query,
                 {

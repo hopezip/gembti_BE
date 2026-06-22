@@ -123,6 +123,7 @@ async def ingest_support_help_documents(
     embedding_client: EmbeddingClient,
     vector_store: ChatChunkVectorStore,
     directory: Path | str = Path("docs/help/support"),
+    replace_existing: bool = False,
 ) -> SupportRagIngestionResult:
     """고객센터 공개 도움말 Markdown 파일들을 RAG 벡터 저장소에 적재한다."""
 
@@ -146,9 +147,10 @@ async def ingest_support_help_documents(
             )
         )
 
-    raw_upsert_result = cast("Any", vector_store.upsert)(entries)
-    if inspect.isawaitable(raw_upsert_result):
-        await raw_upsert_result
+    write_method = vector_store.replace_support_corpus if replace_existing else vector_store.upsert
+    raw_write_result = cast("Any", write_method)(entries)
+    if inspect.isawaitable(raw_write_result):
+        await raw_write_result
 
     return SupportRagIngestionResult(
         document_count=len(documents),
