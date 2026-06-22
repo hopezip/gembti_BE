@@ -35,6 +35,16 @@ class ConflictException(AppException):
         super().__init__(status.HTTP_409_CONFLICT, detail)
 
 
+class InternalServerErrorException(AppException):
+    def __init__(self, detail: str = "서버 내부 오류가 발생했습니다.") -> None:
+        super().__init__(status.HTTP_500_INTERNAL_SERVER_ERROR, detail)
+
+
+class BadGatewayException(AppException):
+    def __init__(self, detail: str = "외부 서비스 응답이 올바르지 않습니다.") -> None:
+        super().__init__(status.HTTP_502_BAD_GATEWAY, detail)
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:

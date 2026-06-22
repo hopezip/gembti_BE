@@ -209,7 +209,7 @@ class SteamLibraryGameResponse(BaseModel):
     playtime_hours: float
     last_played_at: datetime | None = None
     synced_at: datetime
-    rating: float | None = None
+    rating: float | None = Field(default=None, ge=0.0, le=5.0)
 
 
 class SteamLibraryResponse(BaseModel):

@@ -1,11 +1,14 @@
 from dataclasses import dataclass
 from enum import StrEnum
+import logging
 from typing import Any
 from urllib.parse import urlencode
 
 import httpx
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 STEAM_OPENID_URL = "https://steamcommunity.com/openid/login"
 STEAM_IDENTIFIER_SELECT = "http://specs.openid.net/auth/2.0/identifier_select"
@@ -37,12 +40,69 @@ class SteamLibraryVisibility(StrEnum):
 class SteamOwnedGamesResult:
     visibility: SteamLibraryVisibility
     games: list[dict[str, Any]]
+    game_count: int | None = None
+
+
+class SteamLibraryPayloadError(RuntimeError):
+    """Steam의 보유 게임 응답 구조나 게임 수가 계약과 다를 때 발생한다."""
 
 
 @dataclass(frozen=True)
 class SteamRecentlyPlayedResult:
     visibility: SteamLibraryVisibility
     games: list[dict[str, Any]]
+
+
+def parse_owned_games_payload(payload: dict[str, Any]) -> SteamOwnedGamesResult:
+    response_body = payload.get("response")
+    if not isinstance(response_body, dict):
+        logger.error("Steam 보유 게임 응답에 response 객체가 없습니다.")
+        raise SteamLibraryPayloadError("Steam API response 객체 누락")
+
+    if not response_body:
+        return SteamOwnedGamesResult(SteamLibraryVisibility.PRIVATE, [])
+
+    game_count = response_body.get("game_count")
+    if isinstance(game_count, bool) or not isinstance(game_count, int) or game_count < 0:
+        logger.error("Steam 보유 게임 응답의 game_count가 올바르지 않습니다.")
+        raise SteamLibraryPayloadError("Steam API game_count 형식 오류")
+
+    raw_games = response_body.get("games")
+    if raw_games is None and game_count == 0:
+        return SteamOwnedGamesResult(SteamLibraryVisibility.EMPTY, [], game_count=0)
+    if not isinstance(raw_games, list):
+        logger.error("Steam 보유 게임 응답의 games가 목록이 아닙니다.")
+        raise SteamLibraryPayloadError("Steam API games 형식 오류")
+
+    games: list[dict[str, Any]] = []
+    app_ids: list[int] = []
+    for game in raw_games:
+        if not isinstance(game, dict):
+            raise SteamLibraryPayloadError("Steam API 게임 항목 형식 오류")
+        app_id = game.get("appid")
+        if isinstance(app_id, bool) or not isinstance(app_id, int) or app_id <= 0:
+            raise SteamLibraryPayloadError("Steam API AppID 형식 오류")
+        games.append(game)
+        app_ids.append(app_id)
+
+    received_count = len(games)
+    if game_count != received_count:
+        logger.error(
+            "Steam 보유 게임 수 불일치: reported=%d received=%d",
+            game_count,
+            received_count,
+        )
+        raise SteamLibraryPayloadError(
+            f"Steam API 게임 수 불일치: reported={game_count}, received={received_count}"
+        )
+    if len(set(app_ids)) != received_count:
+        logger.error("Steam 보유 게임 응답에 중복 AppID가 있습니다.")
+        raise SteamLibraryPayloadError("Steam API 중복 AppID")
+
+    if not games:
+        return SteamOwnedGamesResult(SteamLibraryVisibility.EMPTY, [], game_count=0)
+
+    return SteamOwnedGamesResult(SteamLibraryVisibility.PUBLIC, games, game_count=game_count)
 
 
 def build_steam_openid_url(return_to: str, realm: str) -> str:
@@ -129,15 +189,7 @@ async def get_owned_games(steam_id_64: int) -> SteamOwnedGamesResult:
         except (httpx.HTTPError, ValueError):
             return SteamOwnedGamesResult(SteamLibraryVisibility.FAILED, [])
 
-    response_body = payload.get("response")
-    if not isinstance(response_body, dict) or "games" not in response_body:
-        return SteamOwnedGamesResult(SteamLibraryVisibility.PRIVATE, [])
-
-    games = response_body.get("games") or []
-    if not games:
-        return SteamOwnedGamesResult(SteamLibraryVisibility.EMPTY, [])
-
-    return SteamOwnedGamesResult(SteamLibraryVisibility.PUBLIC, games)
+    return parse_owned_games_payload(payload)
 
 
 async def get_recently_played_games(steam_id_64: int) -> SteamRecentlyPlayedResult:

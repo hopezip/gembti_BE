@@ -77,7 +77,7 @@ async def test_get_me_returns_profile_and_steam_library_summary(
     assert response.steam_library.total_playtime_hours == 95.0
     assert response.steam_library.games[0].title == "Counter-Strike 2"
     assert response.steam_library.games[0].playtime_hours == 95.0
-    assert response.steam_library.games[0].rating == 92.5
+    assert response.steam_library.games[0].rating == 4.6
 
 
 def test_build_library_game_response_uses_fallback_title_without_game() -> None:

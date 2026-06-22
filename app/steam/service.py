@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import logging
 import re
 from typing import TYPE_CHECKING
 from urllib.parse import urlencode
@@ -11,12 +12,15 @@ from app.auth.service import issue_auth_tokens
 from app.core.config import settings
 from app.core.enums import LoginProvider, UserStatus
 from app.core.exceptions import (
+    BadGatewayException,
     BadRequestException,
     ConflictException,
     ForbiddenException,
+    InternalServerErrorException,
     NotFoundException,
 )
 from app.steam.client import (
+    SteamLibraryPayloadError,
     SteamLibraryVisibility,
     build_steam_openid_url,
     get_owned_games,
@@ -25,6 +29,7 @@ from app.steam.client import (
 )
 from app.steam.models import SteamAccount, SteamSyncStatus, UserLibraryGame
 from app.steam.repository import (
+    count_library_games_by_user_id,
     delete_steam_connection,
     get_steam_account_by_steam_id,
     get_steam_account_by_user_id,
@@ -50,6 +55,8 @@ STEAM_CLAIMED_ID_PATTERN = re.compile(r"^https://steamcommunity\.com/openid/id/(
 STEAM_NEXT_RECOMMENDATION = "RECOMMENDATION"
 STEAM_NEXT_SURVEY = "SURVEY"
 STEAM_NEXT_RETRY = "RETRY"
+
+logger = logging.getLogger(__name__)
 
 
 def get_steam_return_to() -> str:
@@ -301,25 +308,61 @@ async def sync_steam_library(db: AsyncSession, user_id: int) -> SteamSyncRespons
     if steam_account is None:
         raise NotFoundException("Steam 계정이 연동되어 있지 않습니다.")
 
-    owned_games = await get_owned_games(steam_account.steam_id_64)
+    try:
+        owned_games = await get_owned_games(steam_account.steam_id_64)
+    except SteamLibraryPayloadError as exc:
+        logger.error(
+            "Steam 라이브러리 API 응답 검증 실패: user_id=%d reason=%s",
+            user_id,
+            exc,
+        )
+        raise BadGatewayException("Steam API 응답의 게임 수가 일치하지 않습니다.") from exc
     synced_at = datetime.now(UTC)
 
     if owned_games.visibility == SteamLibraryVisibility.PUBLIC:
+        expected_count = owned_games.game_count
+        if expected_count is None:
+            logger.error("Steam 공개 라이브러리에 game_count가 없습니다: user_id=%d", user_id)
+            raise BadGatewayException("Steam API 응답에 게임 수가 없습니다.")
+
         library_games = [
             build_user_library_game(user_id=user_id, steam_game=steam_game, synced_at=synced_at)
             for steam_game in owned_games.games
         ]
-        synced_count = await upsert_library_games(db, user_id, library_games)
+        await upsert_library_games(db, user_id, library_games)
+        stored_count = await count_library_games_by_user_id(db, user_id)
+        if stored_count != expected_count:
+            logger.error(
+                "Steam 라이브러리 저장 수 불일치: user_id=%d expected=%d stored=%d",
+                user_id,
+                expected_count,
+                stored_count,
+            )
+            raise InternalServerErrorException(
+                "Steam 라이브러리 저장 결과가 API 게임 수와 일치하지 않습니다."
+            )
+
         steam_account.steam_sync_status = SteamSyncStatus.SUCCESS
         steam_account.last_synced_at = synced_at
         await db.flush()
         return SteamSyncResponse(
             steam_sync_status=SteamSyncStatus.SUCCESS,
-            synced_count=synced_count,
+            synced_count=stored_count,
             last_synced_at=synced_at,
             next=STEAM_NEXT_RECOMMENDATION,
             message="Steam 라이브러리 동기화가 완료되었습니다.",
         )
+
+    if owned_games.visibility == SteamLibraryVisibility.EMPTY:
+        await upsert_library_games(db, user_id, [])
+        stored_count = await count_library_games_by_user_id(db, user_id)
+        if stored_count != 0:
+            logger.error(
+                "빈 Steam 라이브러리 정리 실패: user_id=%d stored=%d",
+                user_id,
+                stored_count,
+            )
+            raise InternalServerErrorException("Steam 라이브러리 기존 데이터 정리에 실패했습니다.")
 
     steam_account.steam_sync_status = map_visibility_to_sync_status(owned_games.visibility)
     steam_account.last_synced_at = synced_at
@@ -334,9 +377,13 @@ async def sync_steam_library(db: AsyncSession, user_id: int) -> SteamSyncRespons
 
 
 async def sync_steam_library_now(db: AsyncSession, user_id: int) -> SteamSyncResponse:
-    result = await sync_steam_library(db, user_id)
-    await db.commit()
-    return result
+    try:
+        result = await sync_steam_library(db, user_id)
+        await db.commit()
+        return result
+    except Exception:
+        await db.rollback()
+        raise
 
 
 def build_user_library_game(
