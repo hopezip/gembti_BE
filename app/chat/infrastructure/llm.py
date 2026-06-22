@@ -152,7 +152,9 @@ def _build_chat_messages(
     recent_turns: list[dict[str, str]] | None = None,
 ) -> list[dict[str, str]]:
     context = "\n\n".join(
-        f"[{chunk.source}] {chunk.content}" for chunk in chunks[:3] if chunk.content.strip()
+        f"[참고 문서 {index}] {chunk.content}"
+        for index, chunk in enumerate(chunks[:3], start=1)
+        if chunk.content.strip()
     )
     messages = [
         {
